@@ -9,7 +9,7 @@ declare module 'fastify' {
 }
 
 export default fp(async function mongoPlugin(app: FastifyInstance) {
-  const client = new MongoClient(app.config.mongo.url);
+  const client = new MongoClient(app.config.mongo.url, { serverSelectionTimeoutMS: 5000 });
   await client.connect();
   const db = client.db();
 
