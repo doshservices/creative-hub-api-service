@@ -8,6 +8,9 @@ export interface KycVerificationDocument {
   accountId: ObjectId;
   documentKey: string;
   documentType: DocumentType;
+  // ISO 3166-1 alpha-3 (e.g. "NGA") — Prembly's document-verification endpoint requires the
+  // issuing country per submission, not a service-wide default.
+  documentCountry: string;
   status: KycStatus;
   // Our own _id is what's sent to Prembly as the correlation reference and echoed back in the
   // webhook — providerReference is purely informational (whatever id Prembly assigns on their

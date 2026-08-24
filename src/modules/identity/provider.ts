@@ -1,64 +1,93 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { DocumentType } from './model.js';
+
+// Prembly's document-code vocabulary (doc_type) differs from our own DocumentType — mapped at
+// this boundary so the rest of the codebase never has to know Prembly's abbreviations.
+// https://docs.prembly.com/docs/document-verification-copy-4
+const DOC_TYPE_CODES: Record<DocumentType, string> = {
+  national_id: 'ID',
+  drivers_license: 'DL',
+  passport: 'PP',
+};
+
+interface PremblyDocumentVerificationResponse {
+  status: boolean;
+  response_code?: string;
+  message?: string;
+  verification?: {
+    status?: string;
+    reference?: string;
+  };
+}
+
+export interface PremblyVerificationResult {
+  status: 'approved' | 'rejected';
+  providerReference: string | null;
+  failureReason: string | null;
+}
 
 export interface PremblyClientPort {
   submitVerification(input: {
-    reference: string;
-    documentUrl: string;
+    documentImageBase64: string;
     documentType: DocumentType;
-  }): Promise<void>;
+    documentCountry: string;
+  }): Promise<PremblyVerificationResult>;
 }
 
-// Real Prembly integration — endpoint path, payload field names, and response shape are best-
-// guess conventions (no sandbox credentials were available while building this) and should be
-// reconciled against Prembly's actual API docs before this goes live.
+// POST /verification/document responds synchronously with the verdict — Prembly's webhooks are
+// a separate product (the hosted Identity Widget), not part of this direct-API flow, so there is
+// no async callback to wait on here.
+// https://docs.prembly.com/docs/document-verification-copy-4
+// https://docs.prembly.com/docs/authentication
 export class HttpPremblyClient implements PremblyClientPort {
   constructor(
     private readonly baseUrl: string,
     private readonly apiKey: string,
+    private readonly appId: string,
   ) {}
 
   async submitVerification(input: {
-    reference: string;
-    documentUrl: string;
+    documentImageBase64: string;
     documentType: DocumentType;
-  }): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/identity/verify`, {
+    documentCountry: string;
+  }): Promise<PremblyVerificationResult> {
+    const response = await fetch(`${this.baseUrl}/verification/document`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${this.apiKey}`,
+        // Prembly's docs are explicit: no Authorization header, auth is x-api-key + app-id.
+        'x-api-key': this.apiKey,
+        'app-id': this.appId,
       },
       body: JSON.stringify({
-        reference: input.reference,
-        document_url: input.documentUrl,
-        document_type: input.documentType,
+        doc_type: DOC_TYPE_CODES[input.documentType],
+        doc_image: input.documentImageBase64,
+        doc_country: input.documentCountry,
       }),
     });
 
     if (!response.ok) {
       throw new Error(`Prembly submission failed with status ${response.status}`);
     }
-  }
-}
 
-export interface WebhookSignatureVerifierPort {
-  verify(rawBody: Buffer, signature: string | undefined): boolean;
-}
+    const body = (await response.json()) as PremblyDocumentVerificationResponse;
+    const verificationStatus = body.verification?.status;
+    const providerReference = body.verification?.reference ?? null;
 
-// HMAC-SHA256 over the raw request body — the standard pattern the third-party-provider skill
-// calls for. Header name and algorithm are conventions pending Prembly's real webhook docs.
-export class HmacWebhookSignatureVerifier implements WebhookSignatureVerifierPort {
-  constructor(private readonly secret: string) {}
-
-  verify(rawBody: Buffer, signature: string | undefined): boolean {
-    if (!signature) return false;
-
-    const expected = createHmac('sha256', this.secret).update(rawBody).digest('hex');
-    const expectedBuffer = Buffer.from(expected, 'hex');
-    const providedBuffer = Buffer.from(signature, 'hex');
-
-    if (expectedBuffer.length !== providedBuffer.length) return false;
-    return timingSafeEqual(expectedBuffer, providedBuffer);
+    if (verificationStatus === 'VERIFIED') {
+      return { status: 'approved', providerReference, failureReason: null };
+    }
+    if (verificationStatus === 'NOT-VERIFIED') {
+      return {
+        status: 'rejected',
+        providerReference,
+        failureReason: body.message ?? 'Document could not be verified',
+      };
+    }
+    // PENDING ("verification request has failed and will be retried at a later time", per
+    // Prembly's docs) or an unrecognized status — treat as transient so BullMQ retries with
+    // backoff, the same as an HTTP-level failure above.
+    throw new Error(
+      `Prembly verification not final: status=${verificationStatus ?? 'unknown'} code=${body.response_code ?? 'unknown'}`,
+    );
   }
 }

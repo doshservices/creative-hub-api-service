@@ -1,8 +1,10 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../app.js';
 import type { AccountType } from '../../auth/model.js';
+import { KycVerificationRepository } from '../repository.js';
+import { IdentityService } from '../service.js';
 
 function uniqueEmail(): string {
   return `test-${randomUUID()}@example.com`;
@@ -28,7 +30,11 @@ async function submitVerification(app: FastifyInstance, token: string) {
     method: 'POST',
     url: '/identity/verifications',
     headers: { authorization: `Bearer ${token}` },
-    payload: { documentKey: `kyc-docs/${randomUUID()}.jpg`, documentType: 'national_id' },
+    payload: {
+      documentKey: `kyc-docs/${randomUUID()}.jpg`,
+      documentType: 'national_id',
+      documentCountry: 'NGA',
+    },
   });
 }
 
@@ -51,10 +57,6 @@ async function waitForStatus(
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-}
-
-function sign(secret: string, body: Buffer): string {
-  return createHmac('sha256', secret).update(body).digest('hex');
 }
 
 describe('identity routes', () => {
@@ -80,7 +82,7 @@ describe('identity routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/identity/verifications',
-        payload: { documentKey: 'k', documentType: 'national_id' },
+        payload: { documentKey: 'k', documentType: 'national_id', documentCountry: 'NGA' },
       });
       expect(response.statusCode).toBe(401);
     });
@@ -97,7 +99,7 @@ describe('identity routes', () => {
         method: 'POST',
         url: '/identity/verifications',
         headers: { authorization: `Bearer ${token}` },
-        payload: { documentKey: 'k', documentType: 'passport-photo' },
+        payload: { documentKey: 'k', documentType: 'passport-photo', documentCountry: 'NGA' },
       });
       expect(response.statusCode).toBe(400);
     });
@@ -117,11 +119,14 @@ describe('identity routes', () => {
       const token = await registerAndGetToken(app, 'creative');
       await submitVerification(app, token);
 
-      const { statusCode, body } = await waitForStatus(app, token, 'failed');
+      // Each retry now makes a real (failing, since the object was never uploaded) S3 call
+      // before ever reaching the unreachable Prembly URL, so this needs more headroom than a
+      // purely local/synchronous failure would.
+      const { statusCode, body } = await waitForStatus(app, token, 'failed', 15000);
 
       expect(statusCode).toBe(200);
       expect(body.status).toBe('failed');
-    }, 10000);
+    }, 20000);
   });
 
   describe('GET /identity/verifications/me', () => {
@@ -141,68 +146,25 @@ describe('identity routes', () => {
     });
   });
 
-  describe('POST /identity/webhooks/prembly', () => {
-    const secret = 'dev-webhook-secret'; // matches PREMBLY_WEBHOOK_SECRET in .env
-
-    it('rejects an invalid signature', async () => {
-      const payload = Buffer.from(
-        JSON.stringify({ reference: '000000000000000000000000', status: 'approved' }),
-      );
-      const response = await app.inject({
-        method: 'POST',
-        url: '/identity/webhooks/prembly',
-        headers: { 'content-type': 'application/json', 'x-prembly-signature': 'deadbeef' },
-        payload,
-      });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('rejects a missing signature header', async () => {
-      const payload = Buffer.from(
-        JSON.stringify({ reference: '000000000000000000000000', status: 'approved' }),
-      );
-      const response = await app.inject({
-        method: 'POST',
-        url: '/identity/webhooks/prembly',
-        headers: { 'content-type': 'application/json' },
-        payload,
-      });
-      expect(response.statusCode).toBe(401);
-    });
-
-    it('acknowledges a validly signed payload for an unknown reference without erroring', async () => {
-      const payload = Buffer.from(
-        JSON.stringify({ reference: '000000000000000000000000', status: 'approved' }),
-      );
-      const response = await app.inject({
-        method: 'POST',
-        url: '/identity/webhooks/prembly',
-        headers: {
-          'content-type': 'application/json',
-          'x-prembly-signature': sign(secret, payload),
-        },
-        payload,
-      });
-      expect(response.statusCode).toBe(204);
-    });
-
-    it('updates the verification, records an audit entry, and is idempotent on redelivery', async () => {
+  // The KYC worker calls Prembly's document-verification endpoint synchronously and applies
+  // whatever verdict comes back via IdentityService.applyProviderResult — there's no webhook
+  // route to hit here, so this exercises that same result-application path directly against the
+  // app's real Mongo/audit plugin (only the Prembly HTTP call itself is out of scope — that's
+  // exactly the "provider client" the test-suite skill allows faking).
+  describe('KYC result application (worker path)', () => {
+    it('updates the verification, records an audit entry, and is idempotent on reapplication', async () => {
       const token = await registerAndGetToken(app, 'creative');
       const submitResponse = await submitVerification(app, token);
       const verificationId = submitResponse.json().data.id as string;
 
-      const payload = Buffer.from(
-        JSON.stringify({ reference: verificationId, status: 'approved' }),
+      const repository = new KycVerificationRepository(app.mongo.db);
+      const service = new IdentityService(
+        repository,
+        { enqueueVerification: async () => {} },
+        app.audit,
       );
-      const signature = sign(secret, payload);
 
-      const firstDelivery = await app.inject({
-        method: 'POST',
-        url: '/identity/webhooks/prembly',
-        headers: { 'content-type': 'application/json', 'x-prembly-signature': signature },
-        payload,
-      });
-      expect(firstDelivery.statusCode).toBe(204);
+      await service.applyProviderResult(verificationId, 'approved', 'prembly-ref-1', null);
 
       const afterFirst = await app.inject({
         method: 'GET',
@@ -218,20 +180,33 @@ describe('identity routes', () => {
       expect(auditEntries).toHaveLength(1);
       expect(auditEntries[0]?.targetId).toBe(verificationId);
 
-      // Redelivery of the exact same event — must not double-audit.
-      const secondDelivery = await app.inject({
-        method: 'POST',
-        url: '/identity/webhooks/prembly',
-        headers: { 'content-type': 'application/json', 'x-prembly-signature': signature },
-        payload,
-      });
-      expect(secondDelivery.statusCode).toBe(204);
+      // A retried job re-applying the same terminal status — must not double-audit.
+      await service.applyProviderResult(verificationId, 'approved', 'prembly-ref-1', null);
 
-      const auditEntriesAfterRedelivery = await app.mongo.db
+      const auditEntriesAfterRetry = await app.mongo.db
         .collection('auditEntries')
         .find({ action: 'identity.kyc_result' })
         .toArray();
-      expect(auditEntriesAfterRedelivery).toHaveLength(1);
+      expect(auditEntriesAfterRetry).toHaveLength(1);
+    });
+
+    it('acknowledges an unknown verification id without erroring or auditing', async () => {
+      const repository = new KycVerificationRepository(app.mongo.db);
+      const service = new IdentityService(
+        repository,
+        { enqueueVerification: async () => {} },
+        app.audit,
+      );
+
+      await expect(
+        service.applyProviderResult('000000000000000000000000', 'approved', 'ref', null),
+      ).resolves.toBeUndefined();
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'identity.kyc_result' })
+        .toArray();
+      expect(auditEntries).toHaveLength(0);
     });
   });
 });

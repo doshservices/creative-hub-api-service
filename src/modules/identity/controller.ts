@@ -5,6 +5,7 @@ import type { IdentityService } from './service.js';
 export interface SubmitVerificationBody {
   documentKey: string;
   documentType: DocumentType;
+  documentCountry: string;
 }
 
 export class IdentityController {
@@ -21,17 +22,5 @@ export class IdentityController {
   getMyVerification = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const data = await this.service.getMyVerification(request.user.sub);
     await reply.send({ success: true, data });
-  };
-
-  handlePremblyWebhook = async (
-    request: FastifyRequest<{ Body: Buffer }>,
-    reply: FastifyReply,
-  ): Promise<void> => {
-    const signature = request.headers['x-prembly-signature'];
-    await this.service.handleWebhook(
-      request.body,
-      typeof signature === 'string' ? signature : undefined,
-    );
-    await reply.code(204).send();
   };
 }

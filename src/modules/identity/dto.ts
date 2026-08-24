@@ -4,6 +4,7 @@ export interface KycVerificationDTO {
   id: string;
   accountId: string;
   documentType: DocumentType;
+  documentCountry: string;
   status: KycStatus;
   providerReference: string | null;
   failureReason: string | null;

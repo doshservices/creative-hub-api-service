@@ -1,15 +1,12 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Redis } from 'ioredis';
 import type { FastifyInstance } from 'fastify';
 import { KycVerificationRepository } from './repository.js';
-import { HmacWebhookSignatureVerifier, HttpPremblyClient } from './provider.js';
-import { createKycQueue, createKycWorker, type DocumentUrlSignerPort } from './queue.js';
+import { HttpPremblyClient } from './provider.js';
+import { createKycQueue, createKycWorker, type DocumentBytesFetcherPort } from './queue.js';
 import { IdentityService, type QueueEnqueuerPort } from './service.js';
 import { IdentityController } from './controller.js';
 import { registerIdentityRoutes } from './routes.js';
-
-const DOCUMENT_URL_TTL_SECONDS = 300;
 
 // Not wrapped in fastify-plugin — needs its own encapsulated context for
 // `{ prefix: '/identity' }` to apply, same reasoning as the other route-registering modules.
@@ -28,15 +25,38 @@ export default async function identityModule(app: FastifyInstance): Promise<void
     backoffMs: app.config.kycJob.backoffMs,
   });
 
-  const documentSigner: DocumentUrlSignerPort = {
-    async createPresignedGetUrl(key: string) {
+  // Prembly's document-verification endpoint takes the image inline (base64), not a URL it
+  // fetches itself, so the worker needs the object's bytes, not a presigned link.
+  const documentFetcher: DocumentBytesFetcherPort = {
+    async fetchBase64(key: string) {
       const command = new GetObjectCommand({ Bucket: app.config.s3.bucket, Key: key });
-      return getSignedUrl(app.s3, command, { expiresIn: DOCUMENT_URL_TTL_SECONDS });
+      const response = await app.s3.send(command);
+      if (!response.Body) {
+        throw new Error(`S3 object has no body: ${key}`);
+      }
+      const bytes = await response.Body.transformToByteArray();
+      return Buffer.from(bytes).toString('base64');
     },
   };
-  const premblyClient = new HttpPremblyClient(app.config.prembly.apiUrl, app.config.prembly.apiKey);
+  const premblyClient = new HttpPremblyClient(
+    app.config.prembly.apiUrl,
+    app.config.prembly.apiKey,
+    app.config.prembly.appId,
+  );
 
-  const worker = createKycWorker(workerConnection, { repository, documentSigner, premblyClient });
+  const queueEnqueuer: QueueEnqueuerPort = {
+    async enqueueVerification(verificationId: string) {
+      await queue.add('submit', { verificationId });
+    },
+  };
+  const service = new IdentityService(repository, queueEnqueuer, app.audit);
+
+  const worker = createKycWorker(workerConnection, {
+    repository,
+    documentFetcher,
+    premblyClient,
+    resultApplier: service,
+  });
   worker.on('failed', (job, error) => {
     if (!job) return;
     const attempts = job.opts.attempts ?? 1;
@@ -47,16 +67,8 @@ export default async function identityModule(app: FastifyInstance): Promise<void
     }
   });
 
-  const queueEnqueuer: QueueEnqueuerPort = {
-    async enqueueVerification(verificationId: string) {
-      await queue.add('submit', { verificationId });
-    },
-  };
-  const signatureVerifier = new HmacWebhookSignatureVerifier(app.config.prembly.webhookSecret);
-
-  const service = new IdentityService(repository, queueEnqueuer, signatureVerifier, app.audit);
   const controller = new IdentityController(service);
-  await registerIdentityRoutes(app, controller);
+  registerIdentityRoutes(app, controller);
 
   app.addHook('onClose', async () => {
     await worker.close();

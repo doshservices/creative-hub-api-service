@@ -1,4 +1,5 @@
 import { Queue, Worker, type ConnectionOptions, type Job } from 'bullmq';
+import type { PremblyVerificationResult } from './provider.js';
 
 export const KYC_QUEUE_NAME = 'identity.kyc-verification';
 
@@ -6,22 +7,36 @@ export interface KycJobPayload {
   verificationId: string;
 }
 
-export interface DocumentUrlSignerPort {
-  createPresignedGetUrl(key: string): Promise<string>;
+// Prembly's document-verification endpoint takes the image inline (base64), not a URL it fetches
+// itself — see provider.ts — so the worker needs the raw bytes, not a presigned link.
+export interface DocumentBytesFetcherPort {
+  fetchBase64(key: string): Promise<string>;
 }
 
 export interface PremblySubmitterPort {
   submitVerification(input: {
-    reference: string;
-    documentUrl: string;
+    documentImageBase64: string;
     documentType: string;
-  }): Promise<void>;
+    documentCountry: string;
+  }): Promise<PremblyVerificationResult>;
+}
+
+export interface KycResultApplierPort {
+  applyProviderResult(
+    verificationId: string,
+    status: 'approved' | 'rejected',
+    providerReference: string | null,
+    failureReason: string | null,
+  ): Promise<void>;
 }
 
 export interface KycProcessingRepositoryPort {
-  findForProcessing(
-    id: string,
-  ): Promise<{ accountId: string; documentKey: string; documentType: string } | null>;
+  findForProcessing(id: string): Promise<{
+    accountId: string;
+    documentKey: string;
+    documentType: string;
+    documentCountry: string;
+  } | null>;
 }
 
 export function createKycQueue(
@@ -41,15 +56,17 @@ export function createKycQueue(
   });
 }
 
-// The worker only resolves a fresh presigned URL and calls Prembly; it never receives the
-// document key directly in the job payload (see the third-party-provider skill: a job payload
-// carries a reference, not a duplicate copy of data already in Mongo).
+// The worker calls Prembly directly and applies whatever verdict comes back in that same call —
+// Prembly's document-verification endpoint responds synchronously, so unlike a webhook-driven
+// integration there's no separate callback path; a thrown error here (transient HTTP failure, or
+// a non-final PENDING status — see provider.ts) triggers BullMQ's configured retry/backoff.
 export function createKycWorker(
   connection: ConnectionOptions,
   deps: {
     repository: KycProcessingRepositoryPort;
-    documentSigner: DocumentUrlSignerPort;
+    documentFetcher: DocumentBytesFetcherPort;
     premblyClient: PremblySubmitterPort;
+    resultApplier: KycResultApplierPort;
   },
 ): Worker<KycJobPayload> {
   return new Worker<KycJobPayload>(
@@ -62,14 +79,19 @@ export function createKycWorker(
         return;
       }
 
-      const documentUrl = await deps.documentSigner.createPresignedGetUrl(record.documentKey);
-      await deps.premblyClient.submitVerification({
-        reference: job.data.verificationId,
-        documentUrl,
+      const documentImageBase64 = await deps.documentFetcher.fetchBase64(record.documentKey);
+      const result = await deps.premblyClient.submitVerification({
+        documentImageBase64,
         documentType: record.documentType,
+        documentCountry: record.documentCountry,
       });
-      // Prembly acknowledges submission here; the actual pass/fail verdict arrives later via
-      // the webhook. A thrown error above triggers BullMQ's configured retry/backoff.
+
+      await deps.resultApplier.applyProviderResult(
+        job.data.verificationId,
+        result.status,
+        result.providerReference,
+        result.failureReason,
+      );
     },
     { connection },
   );

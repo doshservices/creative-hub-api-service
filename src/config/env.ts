@@ -21,7 +21,7 @@ const envSchema = z.object({
 
   PREMBLY_API_URL: z.string().min(1),
   PREMBLY_API_KEY: z.string().min(1),
-  PREMBLY_WEBHOOK_SECRET: z.string().min(1),
+  PREMBLY_APP_ID: z.string().min(1),
   // Small defaults suit local dev/test (fast failure); raise both in production so a slow
   // Prembly outage gets retried meaningfully before a verification is marked failed.
   KYC_JOB_ATTEMPTS: z.coerce.number().int().positive().default(3),
@@ -52,7 +52,7 @@ export interface AppConfig {
   prembly: {
     apiUrl: string;
     apiKey: string;
-    webhookSecret: string;
+    appId: string;
   };
   kycJob: {
     attempts: number;
@@ -96,7 +96,7 @@ export function loadEnv(): AppConfig {
     prembly: {
       apiUrl: data.PREMBLY_API_URL,
       apiKey: data.PREMBLY_API_KEY,
-      webhookSecret: data.PREMBLY_WEBHOOK_SECRET,
+      appId: data.PREMBLY_APP_ID,
     },
     kycJob: {
       attempts: data.KYC_JOB_ATTEMPTS,

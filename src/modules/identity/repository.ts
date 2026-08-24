@@ -11,6 +11,7 @@ import type { KycVerificationDTO } from './dto.js';
 const VERIFICATION_PROJECTION = {
   accountId: 1,
   documentType: 1,
+  documentCountry: 1,
   status: 1,
   providerReference: 1,
   failureReason: 1,
@@ -23,6 +24,7 @@ function toDTO(doc: KycVerificationDocument): KycVerificationDTO {
     id: doc._id.toHexString(),
     accountId: doc.accountId.toHexString(),
     documentType: doc.documentType,
+    documentCountry: doc.documentCountry,
     status: doc.status,
     providerReference: doc.providerReference,
     failureReason: doc.failureReason,
@@ -49,7 +51,7 @@ export class KycVerificationRepository {
   // being the caller's newest submission.
   async upsertSubmission(
     accountId: string,
-    input: { documentKey: string; documentType: DocumentType },
+    input: { documentKey: string; documentType: DocumentType; documentCountry: string },
   ): Promise<KycVerificationDTO> {
     const accountObjectId = new ObjectId(accountId);
     const now = new Date();
@@ -59,6 +61,7 @@ export class KycVerificationRepository {
         $set: {
           documentKey: input.documentKey,
           documentType: input.documentType,
+          documentCountry: input.documentCountry,
           status: 'pending',
           providerReference: null,
           failureReason: null,
@@ -90,18 +93,22 @@ export class KycVerificationRepository {
   // Worker-only accessor: the DTO (and its projection) deliberately excludes documentKey from
   // what routes ever return, but the job processor needs it to build the presigned URL it hands
   // to Prembly.
-  async findForProcessing(
-    id: string,
-  ): Promise<{ accountId: string; documentKey: string; documentType: DocumentType } | null> {
+  async findForProcessing(id: string): Promise<{
+    accountId: string;
+    documentKey: string;
+    documentType: DocumentType;
+    documentCountry: string;
+  } | null> {
     const doc = await this.collection.findOne(
       { _id: new ObjectId(id) },
-      { projection: { accountId: 1, documentKey: 1, documentType: 1 } },
+      { projection: { accountId: 1, documentKey: 1, documentType: 1, documentCountry: 1 } },
     );
     return doc
       ? {
           accountId: doc.accountId.toHexString(),
           documentKey: doc.documentKey,
           documentType: doc.documentType,
+          documentCountry: doc.documentCountry,
         }
       : null;
   }

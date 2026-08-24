@@ -1,10 +1,11 @@
-import { BadRequestError, NotFoundError, UnauthorizedError } from '../../common/errors.js';
+import { NotFoundError } from '../../common/errors.js';
 import type { KycVerificationDTO } from './dto.js';
 import type { DocumentType } from './model.js';
 
 export interface SubmitVerificationInput {
   documentKey: string;
   documentType: DocumentType;
+  documentCountry: string;
 }
 
 export interface KycRepositoryPort {
@@ -23,10 +24,6 @@ export interface QueueEnqueuerPort {
   enqueueVerification(verificationId: string): Promise<void>;
 }
 
-export interface WebhookSignatureVerifierPort {
-  verify(rawBody: Buffer, signature: string | undefined): boolean;
-}
-
 export interface AuditRecorderPort {
   record(input: {
     actorId: string;
@@ -36,27 +33,10 @@ export interface AuditRecorderPort {
   }): Promise<unknown>;
 }
 
-interface WebhookPayload {
-  reference: string;
-  status: 'approved' | 'rejected';
-  providerReference?: string;
-  reason?: string;
-}
-
-function isWebhookPayload(value: unknown): value is WebhookPayload {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.reference === 'string' &&
-    (candidate.status === 'approved' || candidate.status === 'rejected')
-  );
-}
-
 export class IdentityService {
   constructor(
     private readonly repository: KycRepositoryPort,
     private readonly queue: QueueEnqueuerPort,
-    private readonly signatureVerifier: WebhookSignatureVerifierPort,
     private readonly audit: AuditRecorderPort,
   ) {}
 
@@ -77,40 +57,30 @@ export class IdentityService {
     return verification;
   }
 
-  // Webhook handlers update internal state (and would enqueue any follow-up, e.g. notifying the
-  // user) — never the original business logic, per the third-party-provider skill.
-  async handleWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
-    if (!this.signatureVerifier.verify(rawBody, signature)) {
-      throw new UnauthorizedError('Invalid webhook signature');
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rawBody.toString('utf8'));
-    } catch {
-      throw new BadRequestError('Malformed webhook payload');
-    }
-    if (!isWebhookPayload(parsed)) {
-      throw new BadRequestError('Malformed webhook payload');
-    }
-
-    const existing = await this.repository.findById(parsed.reference);
+  // Called by the KYC worker once Prembly's document-verification call returns a definitive
+  // verdict (the call is synchronous — see provider.ts — so there's no webhook redelivery to
+  // guard against, but the worker's own retry/backoff on a transient failure could still call
+  // this twice for the same job, so it stays idempotent on "already at this status".
+  async applyProviderResult(
+    verificationId: string,
+    status: 'approved' | 'rejected',
+    providerReference: string | null,
+    failureReason: string | null,
+  ): Promise<void> {
+    const existing = await this.repository.findById(verificationId);
     if (!existing) {
-      // Unknown reference — nothing to update. Acknowledge rather than error so Prembly doesn't
-      // retry a webhook that will never resolve to a record on our side.
+      // Resubmitted/removed since the job was queued — nothing to do.
       return;
     }
-    if (existing.status === parsed.status) {
-      // Idempotent on the provider's reference id: a redelivered webhook re-applying the same
-      // result is a no-op, not a fresh event — don't write a second audit row for it.
+    if (existing.status === status) {
       return;
     }
 
     const updated = await this.repository.applyResult(
-      parsed.reference,
-      parsed.status,
-      parsed.providerReference ?? null,
-      parsed.reason ?? null,
+      verificationId,
+      status,
+      providerReference,
+      failureReason,
     );
     if (!updated) {
       return;

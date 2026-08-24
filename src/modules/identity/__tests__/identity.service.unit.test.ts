@@ -1,21 +1,15 @@
-import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { BadRequestError, NotFoundError, UnauthorizedError } from '../../../common/errors.js';
+import { NotFoundError } from '../../../common/errors.js';
 import type { KycVerificationDTO } from '../dto.js';
-import { HmacWebhookSignatureVerifier } from '../provider.js';
 import { IdentityService } from '../service.js';
-import type {
-  AuditRecorderPort,
-  KycRepositoryPort,
-  QueueEnqueuerPort,
-  WebhookSignatureVerifierPort,
-} from '../service.js';
+import type { AuditRecorderPort, KycRepositoryPort, QueueEnqueuerPort } from '../service.js';
 
 function buildVerification(overrides: Partial<KycVerificationDTO> = {}): KycVerificationDTO {
   return {
     id: 'verification-1',
     accountId: 'account-1',
     documentType: 'national_id',
+    documentCountry: 'NGA',
     status: 'pending',
     providerReference: null,
     failureReason: null,
@@ -28,7 +22,6 @@ function buildVerification(overrides: Partial<KycVerificationDTO> = {}): KycVeri
 function buildService(overrides: {
   repository?: Partial<KycRepositoryPort>;
   queue?: Partial<QueueEnqueuerPort>;
-  signatureVerifier?: WebhookSignatureVerifierPort;
   audit?: Partial<AuditRecorderPort>;
 }) {
   const repository: KycRepositoryPort = {
@@ -42,16 +35,13 @@ function buildService(overrides: {
     enqueueVerification: vi.fn().mockResolvedValue(undefined),
     ...overrides.queue,
   };
-  const signatureVerifier: WebhookSignatureVerifierPort = overrides.signatureVerifier ?? {
-    verify: vi.fn().mockReturnValue(true),
-  };
   const audit: AuditRecorderPort = {
     record: vi.fn().mockResolvedValue(undefined),
     ...overrides.audit,
   };
 
-  const service = new IdentityService(repository, queue, signatureVerifier, audit);
-  return { service, repository, queue, signatureVerifier, audit };
+  const service = new IdentityService(repository, queue, audit);
+  return { service, repository, queue, audit };
 }
 
 describe('IdentityService.submitVerification', () => {
@@ -61,11 +51,13 @@ describe('IdentityService.submitVerification', () => {
     await service.submitVerification('account-1', {
       documentKey: 'kyc-docs/account-1/id.jpg',
       documentType: 'national_id',
+      documentCountry: 'NGA',
     });
 
     expect(repository.upsertSubmission).toHaveBeenCalledWith('account-1', {
       documentKey: 'kyc-docs/account-1/id.jpg',
       documentType: 'national_id',
+      documentCountry: 'NGA',
     });
     expect(queue.enqueueVerification).toHaveBeenCalledWith('verification-1');
   });
@@ -89,42 +81,18 @@ describe('IdentityService.getMyVerification', () => {
   });
 });
 
-describe('IdentityService.handleWebhook', () => {
-  const payload = Buffer.from(JSON.stringify({ reference: 'verification-1', status: 'approved' }));
-
-  it('rejects an invalid signature before parsing anything', async () => {
-    const { service, repository } = buildService({
-      signatureVerifier: { verify: vi.fn().mockReturnValue(false) },
-    });
-
-    await expect(service.handleWebhook(payload, 'bad-signature')).rejects.toBeInstanceOf(
-      UnauthorizedError,
-    );
-    expect(repository.applyResult).not.toHaveBeenCalled();
-  });
-
-  it('rejects a malformed payload', async () => {
-    const { service } = buildService({});
-
-    await expect(service.handleWebhook(Buffer.from('not json'), 'sig')).rejects.toBeInstanceOf(
-      BadRequestError,
-    );
-  });
-
-  it('rejects a payload missing required fields', async () => {
-    const { service } = buildService({});
-
-    await expect(
-      service.handleWebhook(Buffer.from(JSON.stringify({ status: 'approved' })), 'sig'),
-    ).rejects.toBeInstanceOf(BadRequestError);
-  });
-
-  it('applies the result and records an audit entry on a valid signature', async () => {
+describe('IdentityService.applyProviderResult', () => {
+  it('applies the result and records an audit entry', async () => {
     const { service, repository, audit } = buildService({});
 
-    await service.handleWebhook(payload, 'sig');
+    await service.applyProviderResult('verification-1', 'approved', 'prembly-ref', null);
 
-    expect(repository.applyResult).toHaveBeenCalledWith('verification-1', 'approved', null, null);
+    expect(repository.applyResult).toHaveBeenCalledWith(
+      'verification-1',
+      'approved',
+      'prembly-ref',
+      null,
+    );
     expect(audit.record).toHaveBeenCalledWith({
       actorId: 'account-1',
       action: 'identity.kyc_result',
@@ -133,47 +101,27 @@ describe('IdentityService.handleWebhook', () => {
     });
   });
 
-  it('acknowledges without erroring when the reference matches no record', async () => {
+  it('acknowledges without erroring when the verification id matches no record', async () => {
     const { service, repository, audit } = buildService({
       repository: { findById: vi.fn().mockResolvedValue(null) },
     });
 
-    await service.handleWebhook(payload, 'sig');
+    await service.applyProviderResult('verification-1', 'approved', 'prembly-ref', null);
 
     expect(repository.applyResult).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
   });
 
-  it('is idempotent on redelivery: does not reapply or re-audit an already-applied result', async () => {
+  it('is idempotent: does not reapply or re-audit an already-applied result', async () => {
     const { service, repository, audit } = buildService({
       repository: {
         findById: vi.fn().mockResolvedValue(buildVerification({ status: 'approved' })),
       },
     });
 
-    await service.handleWebhook(payload, 'sig');
+    await service.applyProviderResult('verification-1', 'approved', 'prembly-ref', null);
 
     expect(repository.applyResult).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
-  });
-});
-
-describe('HmacWebhookSignatureVerifier', () => {
-  const secret = 'test-secret';
-  const verifier = new HmacWebhookSignatureVerifier(secret);
-  const body = Buffer.from(JSON.stringify({ reference: 'v1', status: 'approved' }));
-
-  it('accepts a correctly signed body', () => {
-    const signature = createHmac('sha256', secret).update(body).digest('hex');
-    expect(verifier.verify(body, signature)).toBe(true);
-  });
-
-  it('rejects a body signed with the wrong secret', () => {
-    const signature = createHmac('sha256', 'wrong-secret').update(body).digest('hex');
-    expect(verifier.verify(body, signature)).toBe(false);
-  });
-
-  it('rejects a missing signature', () => {
-    expect(verifier.verify(body, undefined)).toBe(false);
   });
 });
