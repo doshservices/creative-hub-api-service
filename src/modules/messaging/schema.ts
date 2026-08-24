@@ -1,19 +1,33 @@
+import { objectIdSchema } from '../../common/schema.js';
+
 export const sendMessageBodySchema = {
   type: 'object',
   required: ['recipientAccountId', 'content'],
   additionalProperties: false,
   properties: {
-    recipientAccountId: { type: 'string', minLength: 1 },
+    recipientAccountId: objectIdSchema,
     content: { type: 'string', minLength: 1, maxLength: 4000 },
   },
 } as const;
 
-export const listQuerySchema = {
+// Conversations paginate on an opaque base64url cursor (see conversation.repository.ts's
+// encodeCursor) — not a bare ObjectId, unlike every other list in this codebase — so it can't
+// share the objectIdSchema pattern used below for messages.
+export const conversationListQuerySchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
     limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
     cursor: { type: 'string', minLength: 1 },
+  },
+} as const;
+
+export const messageListQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+    cursor: objectIdSchema,
   },
 } as const;
 

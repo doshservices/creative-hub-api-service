@@ -1,5 +1,6 @@
 import type { Collection, Db } from 'mongodb';
 import { ObjectId } from 'mongodb';
+import { BadRequestError } from '../../common/errors.js';
 import {
   buildParticipantsKey,
   conversationIndexes,
@@ -28,8 +29,27 @@ function encodeCursor(lastMessageAt: Date, id: string): string {
   return Buffer.from(JSON.stringify(payload)).toString('base64url');
 }
 
+// The cursor is opaque to the client but not to us — reject anything that doesn't decode back
+// to the shape we encoded, rather than letting a malformed value crash JSON.parse or the
+// ObjectId constructor further down in listForAccount.
 function decodeCursor(cursor: string): Cursor {
-  return JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Cursor;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+  } catch {
+    throw new BadRequestError('Invalid cursor');
+  }
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    typeof (parsed as Cursor).t !== 'string' ||
+    typeof (parsed as Cursor).id !== 'string' ||
+    Number.isNaN(Date.parse((parsed as Cursor).t)) ||
+    !ObjectId.isValid((parsed as Cursor).id)
+  ) {
+    throw new BadRequestError('Invalid cursor');
+  }
+  return parsed as Cursor;
 }
 
 function toDTO(doc: ConversationDocument, accountId: string): ConversationDTO {

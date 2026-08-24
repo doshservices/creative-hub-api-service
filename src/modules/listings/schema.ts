@@ -1,3 +1,5 @@
+import { objectIdSchema } from '../../common/schema.js';
+
 const PAYMENT_TYPE = ['fixed', 'hourly'] as const;
 const CURRENCY = ['NGN', 'USD'] as const;
 
@@ -30,7 +32,7 @@ export const listQuerySchema = {
   additionalProperties: false,
   properties: {
     limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
-    cursor: { type: 'string', minLength: 1 },
+    cursor: objectIdSchema,
   },
 } as const;
 

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { PERMISSIONS } from '../../common/permissions.js';
+import { objectIdSchema } from '../../common/schema.js';
 import type {
   ApplicationIdParams,
   ApplyBody,
@@ -20,13 +21,13 @@ import {
 const listingIdParamSchema = {
   type: 'object',
   required: ['listingId'],
-  properties: { listingId: { type: 'string' } },
+  properties: { listingId: objectIdSchema },
 } as const;
 
 const applicationIdParamSchema = {
   type: 'object',
   required: ['id'],
-  properties: { id: { type: 'string' } },
+  properties: { id: objectIdSchema },
 } as const;
 
 export function registerHiringRoutes(app: FastifyInstance, controller: HiringController): void {

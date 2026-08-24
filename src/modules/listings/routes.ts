@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { PERMISSIONS } from '../../common/permissions.js';
+import { objectIdSchema } from '../../common/schema.js';
 import type {
   CreateListingBody,
   ListingIdParams,
@@ -16,7 +17,7 @@ import {
 const idParamSchema = {
   type: 'object',
   required: ['id'],
-  properties: { id: { type: 'string' } },
+  properties: { id: objectIdSchema },
 } as const;
 
 export function registerListingsRoutes(app: FastifyInstance, controller: ListingsController): void {

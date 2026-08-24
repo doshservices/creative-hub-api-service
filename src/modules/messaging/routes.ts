@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { objectIdSchema } from '../../common/schema.js';
 import type {
   ConversationIdParams,
   ListQuery,
@@ -6,8 +7,9 @@ import type {
   SendMessageBody,
 } from './controller.js';
 import {
+  conversationListQuerySchema,
   conversationPageResponseSchema,
-  listQuerySchema,
+  messageListQuerySchema,
   messagePageResponseSchema,
   messageResponseSchema,
   sendMessageBodySchema,
@@ -16,7 +18,7 @@ import {
 const conversationIdParamSchema = {
   type: 'object',
   required: ['id'],
-  properties: { id: { type: 'string' } },
+  properties: { id: objectIdSchema },
 } as const;
 
 export function registerMessagingRoutes(
@@ -36,7 +38,10 @@ export function registerMessagingRoutes(
     '/conversations',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: conversationPageResponseSchema } },
+      schema: {
+        querystring: conversationListQuerySchema,
+        response: { 200: conversationPageResponseSchema },
+      },
     },
     controller.listMyConversations,
   );
@@ -47,7 +52,7 @@ export function registerMessagingRoutes(
       preHandler: app.authenticate,
       schema: {
         params: conversationIdParamSchema,
-        querystring: listQuerySchema,
+        querystring: messageListQuerySchema,
         response: { 200: messagePageResponseSchema },
       },
     },

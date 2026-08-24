@@ -1,3 +1,5 @@
+import { objectIdSchema } from '../../common/schema.js';
+
 const APPLICATION_STATUS = ['pending', 'interview_requested', 'accepted', 'rejected'] as const;
 const CONTRACT_STATUS = ['active', 'completed', 'cancelled'] as const;
 
@@ -6,7 +8,7 @@ export const applyBodySchema = {
   required: ['listingId'],
   additionalProperties: false,
   properties: {
-    listingId: { type: 'string', minLength: 1 },
+    listingId: objectIdSchema,
     message: { type: 'string', maxLength: 2000 },
   },
 } as const;
@@ -26,7 +28,7 @@ export const listQuerySchema = {
   additionalProperties: false,
   properties: {
     limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
-    cursor: { type: 'string', minLength: 1 },
+    cursor: objectIdSchema,
   },
 } as const;
 
