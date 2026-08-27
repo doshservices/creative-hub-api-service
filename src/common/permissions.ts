@@ -9,6 +9,7 @@ export const PERMISSIONS = {
   IDENTITY_VERIFY: 'identity:verify',
   PAYMENTS_INITIATE: 'payments:initiate',
   RBAC_MANAGE: 'rbac:manage',
+  FILES_UPLOAD: 'files:upload',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
