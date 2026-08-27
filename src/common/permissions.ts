@@ -8,6 +8,7 @@ export const PERMISSIONS = {
   HIRING_APPLY: 'hiring:apply',
   IDENTITY_VERIFY: 'identity:verify',
   PAYMENTS_INITIATE: 'payments:initiate',
+  RBAC_MANAGE: 'rbac:manage',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

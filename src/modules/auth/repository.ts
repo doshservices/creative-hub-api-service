@@ -83,4 +83,16 @@ export class AccountRepository {
     );
     return doc ? toDTO(doc) : null;
   }
+
+  // Used by the rbac module (through this module's index.ts) when a role is assigned to an
+  // account — a permission change, so the caller is responsible for the audit entry CLAUDE.md
+  // requires for it, not this method.
+  async updatePermissions(id: string, permissions: string[]): Promise<AccountDTO | null> {
+    const result = await this.collection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { permissions, updatedAt: new Date() } },
+      { returnDocument: 'after', projection: ACCOUNT_FIELDS },
+    );
+    return result ? toDTO(result) : null;
+  }
 }

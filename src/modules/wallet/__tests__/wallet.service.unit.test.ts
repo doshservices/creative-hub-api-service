@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ClientSession } from 'mongodb';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ConflictError } from '../../../common/errors.js';
 import { DuplicateIdempotencyKeyError } from '../ledger.repository.js';
 import { WalletService } from '../service.js';
@@ -11,7 +11,6 @@ import type {
   WalletRepositoryPort,
 } from '../service.js';
 import type { LedgerEntryDTO, WalletDTO } from '../dto.js';
-import type { LedgerEntryType } from '../ledger.model.js';
 
 // A small in-memory fake of both repositories, backing the exact atomic-guard semantics the
 // real Mongo repositories implement ($expr-filtered findOneAndUpdate) — this exercises
@@ -23,20 +22,20 @@ function buildFakes() {
   const ledgerByKey = new Map<string, string>(); // `${walletId}:${idempotencyKey}` -> entry id
 
   const walletRepository: WalletRepositoryPort = {
-    async findByAccountAndCurrency(accountId, currency) {
-      return (
+    findByAccountAndCurrency(accountId, currency) {
+      return Promise.resolve(
         [...wallets.values()].find((w) => w.accountId === accountId && w.currency === currency) ??
-        null
+          null,
       );
     },
-    async findById(id) {
-      return wallets.get(id) ?? null;
+    findById(id) {
+      return Promise.resolve(wallets.get(id) ?? null);
     },
-    async getOrCreate(accountId, currency) {
+    getOrCreate(accountId, currency) {
       const existing = [...wallets.values()].find(
         (w) => w.accountId === accountId && w.currency === currency,
       );
-      if (existing) return existing;
+      if (existing) return Promise.resolve(existing);
       const wallet: WalletDTO = {
         id: randomUUID(),
         accountId,
@@ -48,15 +47,15 @@ function buildFakes() {
         updatedAt: new Date(),
       };
       wallets.set(wallet.id, wallet);
-      return wallet;
+      return Promise.resolve(wallet);
     },
-    async applyDelta(walletId, delta) {
+    applyDelta(walletId, delta) {
       const wallet = wallets.get(walletId);
-      if (!wallet) return null;
+      if (!wallet) return Promise.resolve(null);
       const nextBalance = wallet.balanceMinor + delta.balanceDeltaMinor;
       const nextHeld = wallet.heldMinor + delta.heldDeltaMinor;
       if (nextBalance < 0 || nextHeld < 0 || nextBalance - nextHeld < 0) {
-        return null;
+        return Promise.resolve(null);
       }
       const updated: WalletDTO = {
         ...wallet,
@@ -66,16 +65,19 @@ function buildFakes() {
         updatedAt: new Date(),
       };
       wallets.set(walletId, updated);
-      return updated;
+      return Promise.resolve(updated);
     },
-    async reconcile(walletId) {
+    reconcile(walletId) {
       const wallet = wallets.get(walletId);
-      return { balanceMinor: wallet?.balanceMinor ?? 0, heldMinor: wallet?.heldMinor ?? 0 };
+      return Promise.resolve({
+        balanceMinor: wallet?.balanceMinor ?? 0,
+        heldMinor: wallet?.heldMinor ?? 0,
+      });
     },
   };
 
   const ledgerRepository: LedgerRepositoryPort = {
-    async create(input) {
+    create(input) {
       const key = `${input.walletId}:${input.idempotencyKey}`;
       if (ledgerByKey.has(key)) {
         throw new DuplicateIdempotencyKeyError(input.idempotencyKey);
@@ -94,19 +96,21 @@ function buildFakes() {
       };
       ledgerById.set(entry.id, entry);
       ledgerByKey.set(key, entry.id);
-      return entry;
+      return Promise.resolve(entry);
     },
-    async findByIdempotencyKey(walletId, idempotencyKey) {
+    findByIdempotencyKey(walletId, idempotencyKey) {
       const id = ledgerByKey.get(`${walletId}:${idempotencyKey}`);
-      return id ? (ledgerById.get(id) ?? null) : null;
+      return Promise.resolve(id ? (ledgerById.get(id) ?? null) : null);
     },
-    async findById(id) {
-      return ledgerById.get(id) ?? null;
+    findById(id) {
+      return Promise.resolve(ledgerById.get(id) ?? null);
     },
-    async findByRelatedEntryId(relatedEntryId) {
-      return [...ledgerById.values()].filter((e) => e.relatedEntryId === relatedEntryId);
+    findByRelatedEntryId(relatedEntryId) {
+      return Promise.resolve(
+        [...ledgerById.values()].filter((e) => e.relatedEntryId === relatedEntryId),
+      );
     },
-    async listByWallet(walletId, { limit, cursor }) {
+    listByWallet(walletId, { limit, cursor }) {
       const items = [...ledgerById.values()]
         .filter((e) => e.walletId === walletId)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -115,12 +119,12 @@ function buildFakes() {
       const hasMore = page.length > limit;
       const pageItems = page.slice(0, limit);
       const last = pageItems[pageItems.length - 1];
-      return { items: pageItems, nextCursor: hasMore && last ? last.id : null };
+      return Promise.resolve({ items: pageItems, nextCursor: hasMore && last ? last.id : null });
     },
   };
 
   const transactionRunner: TransactionRunnerPort = {
-    async withTransaction(fn) {
+    withTransaction(fn) {
       return fn({} as ClientSession);
     },
   };
