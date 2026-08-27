@@ -106,11 +106,13 @@ export class WalletService {
   ): Promise<LedgerEntryDTO> {
     const existing = await this.ledger.findByIdempotencyKey(walletId, options.idempotencyKey);
     if (existing) {
+      // No new movement happened — an idempotent replay of an already-recorded entry is not a
+      // fresh event worth auditing again.
       return existing;
     }
 
     try {
-      return await this.transactions.withTransaction(async (session) => {
+      const entry = await this.transactions.withTransaction(async (session) => {
         const updated = await this.wallets.applyDelta(walletId, delta, session);
         if (!updated) {
           throw new ConflictError('Insufficient available balance');
@@ -130,6 +132,16 @@ export class WalletService {
           session,
         );
       });
+      // Every wallet movement is audit-required per CLAUDE.md — written after the transaction
+      // commits, since the audit trail and the ledger are deliberately separate tables (see the
+      // money-and-ledger skill).
+      await this.audit.record({
+        actorId: accountId,
+        action: `wallet.${type}`,
+        targetType: 'ledgerEntry',
+        targetId: entry.id,
+      });
+      return entry;
     } catch (error) {
       if (error instanceof DuplicateIdempotencyKeyError) {
         const winner = await this.ledger.findByIdempotencyKey(walletId, options.idempotencyKey);
@@ -260,7 +272,7 @@ export class WalletService {
     }
 
     try {
-      return await this.transactions.withTransaction(async (session) => {
+      const result = await this.transactions.withTransaction(async (session) => {
         const debitedWallet = await this.wallets.applyDelta(
           fromWallet.id,
           { balanceDeltaMinor: -amountMinor, heldDeltaMinor: 0 },
@@ -308,6 +320,22 @@ export class WalletService {
 
         return { debit, credit };
       });
+
+      // Both legs are audit-required wallet movements (CLAUDE.md) — recorded once per affected
+      // account after the transaction commits.
+      await this.audit.record({
+        actorId: fromAccountId,
+        action: 'wallet.transfer_debit',
+        targetType: 'ledgerEntry',
+        targetId: result.debit.id,
+      });
+      await this.audit.record({
+        actorId: toAccountId,
+        action: 'wallet.transfer_credit',
+        targetType: 'ledgerEntry',
+        targetId: result.credit.id,
+      });
+      return result;
     } catch (error) {
       if (error instanceof DuplicateIdempotencyKeyError) {
         const debit = await this.ledger.findByIdempotencyKey(fromWallet.id, debitKey);

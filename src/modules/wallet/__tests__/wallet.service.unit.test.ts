@@ -185,6 +185,47 @@ describe('WalletService.credit / debit', () => {
   });
 });
 
+describe('WalletService audit entries', () => {
+  it('records an audit entry for a new credit', async () => {
+    const { service, audit } = buildService();
+    const entry = await service.credit('account-1', 'NGN', 1000, { idempotencyKey: 'credit-1' });
+
+    expect(audit.record).toHaveBeenCalledWith({
+      actorId: 'account-1',
+      action: 'wallet.credit',
+      targetType: 'ledgerEntry',
+      targetId: entry.id,
+    });
+  });
+
+  it('does not audit again when a repeated idempotency key replays the same entry', async () => {
+    const { service, audit } = buildService();
+    await service.credit('account-1', 'NGN', 1000, { idempotencyKey: 'same-key' });
+    vi.mocked(audit.record).mockClear();
+
+    await service.credit('account-1', 'NGN', 1000, { idempotencyKey: 'same-key' });
+
+    expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('records one audit entry per side of a transfer', async () => {
+    const { service, audit } = buildService();
+    await service.credit('client-1', 'NGN', 5000, { idempotencyKey: 'fund' });
+    vi.mocked(audit.record).mockClear();
+
+    const { debit, credit } = await service.transfer('client-1', 'creative-1', 'NGN', 3000, {
+      idempotencyKey: 'payout-1',
+    });
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'client-1', action: 'wallet.transfer_debit', targetId: debit.id }),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'creative-1', action: 'wallet.transfer_credit', targetId: credit.id }),
+    );
+  });
+});
+
 describe('WalletService holds', () => {
   it('a hold reserves funds without changing balance, only available', async () => {
     const { service } = buildService();

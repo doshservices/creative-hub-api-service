@@ -10,6 +10,8 @@ export const PERMISSIONS = {
   PAYMENTS_INITIATE: 'payments:initiate',
   RBAC_MANAGE: 'rbac:manage',
   FILES_UPLOAD: 'files:upload',
+  COLLABORATION_SUBMIT: 'collaboration:submit',
+  COLLABORATION_REVIEW: 'collaboration:review',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

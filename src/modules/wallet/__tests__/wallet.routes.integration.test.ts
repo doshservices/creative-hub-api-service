@@ -53,6 +53,7 @@ describe('wallet routes', () => {
     await app.mongo.db.collection('accounts').deleteMany({});
     await app.mongo.db.collection('wallets').deleteMany({});
     await app.mongo.db.collection('ledgerEntries').deleteMany({});
+    await app.mongo.db.collection('auditEntries').deleteMany({});
   });
 
   describe('GET /wallet/me', () => {
@@ -109,6 +110,22 @@ describe('wallet routes', () => {
       });
 
       expect(response.json().data.balanceMinor).toBe(0);
+    });
+  });
+
+  describe('wallet movements write an audit entry', () => {
+    it('records an audit entry for a credit against the real audit plugin', async () => {
+      const { accountId } = await registerAndGetToken(app, 'creative');
+      const entry = await walletService.credit(accountId, 'NGN', 5_000, {
+        idempotencyKey: 'audit-check',
+      });
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'wallet.credit', targetId: entry.id })
+        .toArray();
+      expect(auditEntries).toHaveLength(1);
+      expect(auditEntries[0]?.actorId.toHexString()).toBe(accountId);
     });
   });
 

@@ -62,6 +62,14 @@ export class ContractRepository {
     return toDTO(doc);
   }
 
+  async findById(id: string): Promise<ContractDTO | null> {
+    const doc = await this.collection.findOne(
+      { _id: new ObjectId(id) },
+      { projection: CONTRACT_PROJECTION },
+    );
+    return doc ? toDTO(doc) : null;
+  }
+
   async findByApplicationId(applicationId: string): Promise<ContractDTO | null> {
     const doc = await this.collection.findOne(
       { applicationId: new ObjectId(applicationId) },

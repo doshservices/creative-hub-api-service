@@ -6,6 +6,9 @@ import { HiringService } from './service.js';
 import { HiringController } from './controller.js';
 import { registerHiringRoutes } from './routes.js';
 
+export { ContractRepository } from './contract.repository.js';
+export type { ContractDTO, ContractPage } from './dto.js';
+
 // Not wrapped in fastify-plugin — needs its own encapsulated context for `{ prefix: '/hiring' }`
 // to apply, same reasoning as the other route-registering modules.
 export default async function hiringModule(app: FastifyInstance): Promise<void> {

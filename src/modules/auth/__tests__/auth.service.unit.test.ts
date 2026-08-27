@@ -93,6 +93,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.IDENTITY_VERIFY,
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
+        PERMISSIONS.COLLABORATION_SUBMIT,
       ],
     });
     expect(refreshTokens.set).toHaveBeenCalledWith(
@@ -112,11 +113,17 @@ describe('AuthService.register', () => {
         PERMISSIONS.IDENTITY_VERIFY,
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
+        PERMISSIONS.COLLABORATION_SUBMIT,
       ],
     ],
     [
       'client',
-      [PERMISSIONS.LISTINGS_WRITE, PERMISSIONS.PAYMENTS_INITIATE, PERMISSIONS.FILES_UPLOAD],
+      [
+        PERMISSIONS.LISTINGS_WRITE,
+        PERMISSIONS.PAYMENTS_INITIATE,
+        PERMISSIONS.FILES_UPLOAD,
+        PERMISSIONS.COLLABORATION_REVIEW,
+      ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
     const { service, repository } = buildService({});
