@@ -17,6 +17,7 @@ import messagingModule from './modules/messaging/index.js';
 import notificationsModule from './modules/notifications/index.js';
 import identityModule from './modules/identity/index.js';
 import walletModule from './modules/wallet/index.js';
+import paymentsModule from './modules/payments/index.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Fastify's logger is configured at construction time, before any plugin (including
@@ -66,6 +67,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(notificationsModule, { prefix: '/notifications' });
   await app.register(identityModule, { prefix: '/identity' });
   await app.register(walletModule, { prefix: '/wallet' });
+  await app.register(paymentsModule, { prefix: '/payments' });
 
   return app;
 }

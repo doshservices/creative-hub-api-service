@@ -116,6 +116,7 @@ describe('auth routes', () => {
       PERMISSIONS.CREATIVE_PROFILE_WRITE,
       PERMISSIONS.HIRING_APPLY,
       PERMISSIONS.IDENTITY_VERIFY,
+      PERMISSIONS.PAYMENTS_INITIATE,
     ]);
     expect(account?.status).toBe('active');
   });
@@ -123,9 +124,14 @@ describe('auth routes', () => {
   it.each<[AccountType, string[]]>([
     [
       'creative',
-      [PERMISSIONS.CREATIVE_PROFILE_WRITE, PERMISSIONS.HIRING_APPLY, PERMISSIONS.IDENTITY_VERIFY],
+      [
+      PERMISSIONS.CREATIVE_PROFILE_WRITE,
+      PERMISSIONS.HIRING_APPLY,
+      PERMISSIONS.IDENTITY_VERIFY,
+      PERMISSIONS.PAYMENTS_INITIATE,
     ],
-    ['client', [PERMISSIONS.LISTINGS_WRITE]],
+    ],
+    ['client', [PERMISSIONS.LISTINGS_WRITE, PERMISSIONS.PAYMENTS_INITIATE]],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
     const email = uniqueEmail();
     await register(app, email, { accountType });

@@ -7,6 +7,7 @@ export const PERMISSIONS = {
   LISTINGS_WRITE: 'listings:write',
   HIRING_APPLY: 'hiring:apply',
   IDENTITY_VERIFY: 'identity:verify',
+  PAYMENTS_INITIATE: 'payments:initiate',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

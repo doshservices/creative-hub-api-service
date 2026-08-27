@@ -91,6 +91,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.CREATIVE_PROFILE_WRITE,
         PERMISSIONS.HIRING_APPLY,
         PERMISSIONS.IDENTITY_VERIFY,
+        PERMISSIONS.PAYMENTS_INITIATE,
       ],
     });
     expect(refreshTokens.set).toHaveBeenCalledWith(
@@ -104,9 +105,14 @@ describe('AuthService.register', () => {
   it.each<[AccountType, string[]]>([
     [
       'creative',
-      [PERMISSIONS.CREATIVE_PROFILE_WRITE, PERMISSIONS.HIRING_APPLY, PERMISSIONS.IDENTITY_VERIFY],
+      [
+      PERMISSIONS.CREATIVE_PROFILE_WRITE,
+      PERMISSIONS.HIRING_APPLY,
+      PERMISSIONS.IDENTITY_VERIFY,
+      PERMISSIONS.PAYMENTS_INITIATE,
     ],
-    ['client', [PERMISSIONS.LISTINGS_WRITE]],
+    ],
+    ['client', [PERMISSIONS.LISTINGS_WRITE, PERMISSIONS.PAYMENTS_INITIATE]],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
     const { service, repository } = buildService({});
 

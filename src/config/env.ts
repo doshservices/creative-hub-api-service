@@ -26,6 +26,14 @@ const envSchema = z.object({
   // Prembly outage gets retried meaningfully before a verification is marked failed.
   KYC_JOB_ATTEMPTS: z.coerce.number().int().positive().default(3),
   KYC_JOB_BACKOFF_MS: z.coerce.number().int().positive().default(200),
+
+  FLUTTERWAVE_API_URL: z.string().min(1).default('https://api.flutterwave.com/v3'),
+  FLUTTERWAVE_SECRET_KEY: z.string().min(1),
+  // The exact static secret Flutterwave echoes back in a webhook's `verif-hash` header — see
+  // payments/webhook-auth.ts. Not an HMAC key.
+  FLUTTERWAVE_WEBHOOK_SECRET_HASH: z.string().min(1),
+  PAYMENTS_JOB_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  PAYMENTS_JOB_BACKOFF_MS: z.coerce.number().int().positive().default(200),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -55,6 +63,15 @@ export interface AppConfig {
     appId: string;
   };
   kycJob: {
+    attempts: number;
+    backoffMs: number;
+  };
+  flutterwave: {
+    apiUrl: string;
+    secretKey: string;
+    webhookSecretHash: string;
+  };
+  paymentsJob: {
     attempts: number;
     backoffMs: number;
   };
@@ -101,6 +118,15 @@ export function loadEnv(): AppConfig {
     kycJob: {
       attempts: data.KYC_JOB_ATTEMPTS,
       backoffMs: data.KYC_JOB_BACKOFF_MS,
+    },
+    flutterwave: {
+      apiUrl: data.FLUTTERWAVE_API_URL,
+      secretKey: data.FLUTTERWAVE_SECRET_KEY,
+      webhookSecretHash: data.FLUTTERWAVE_WEBHOOK_SECRET_HASH,
+    },
+    paymentsJob: {
+      attempts: data.PAYMENTS_JOB_ATTEMPTS,
+      backoffMs: data.PAYMENTS_JOB_BACKOFF_MS,
     },
   };
   return cached;

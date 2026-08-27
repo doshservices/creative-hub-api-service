@@ -33,8 +33,13 @@ export interface AccountRepositoryPort {
 // today.
 function defaultPermissionsFor(accountType: AccountType): string[] {
   return accountType === 'creative'
-    ? [PERMISSIONS.CREATIVE_PROFILE_WRITE, PERMISSIONS.HIRING_APPLY, PERMISSIONS.IDENTITY_VERIFY]
-    : [PERMISSIONS.LISTINGS_WRITE];
+    ? [
+        PERMISSIONS.CREATIVE_PROFILE_WRITE,
+        PERMISSIONS.HIRING_APPLY,
+        PERMISSIONS.IDENTITY_VERIFY,
+        PERMISSIONS.PAYMENTS_INITIATE,
+      ]
+    : [PERMISSIONS.LISTINGS_WRITE, PERMISSIONS.PAYMENTS_INITIATE];
 }
 
 export interface RefreshTokenStorePort {
