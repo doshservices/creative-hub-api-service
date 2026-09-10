@@ -9,6 +9,7 @@ import redisPlugin from './plugins/redis.js';
 import jwtAuthPlugin from './plugins/auth.js';
 import s3Plugin from './plugins/s3.js';
 import auditPlugin from './plugins/audit.js';
+import eventBusPlugin from './plugins/event-bus.js';
 import authModule from './modules/auth/index.js';
 import usersModule from './modules/users/index.js';
 import listingsModule from './modules/listings/index.js';
@@ -58,6 +59,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(jwtAuthPlugin);
   await app.register(s3Plugin);
   await app.register(auditPlugin);
+  await app.register(eventBusPlugin);
   await app.register(docsPlugin);
 
   app.get('/health', { logLevel: 'silent' }, () => ({ status: 'ok' }));
