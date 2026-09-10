@@ -123,6 +123,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_REVIEW,
+        PERMISSIONS.EMPLOYER_PROFILE_WRITE,
       ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {

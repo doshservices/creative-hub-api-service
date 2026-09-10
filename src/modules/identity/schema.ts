@@ -1,3 +1,5 @@
+import { objectIdSchema } from '../../common/schema.js';
+
 const DOCUMENT_TYPE = ['national_id', 'drivers_license', 'passport'] as const;
 const KYC_STATUS = ['pending', 'approved', 'rejected', 'failed'] as const;
 
@@ -33,5 +35,37 @@ export const verificationResponseSchema = {
   properties: {
     success: { type: 'boolean' },
     data: { type: 'object', properties: verificationProperties },
+  },
+} as const;
+
+export const listVerificationsQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    status: { type: 'string', enum: KYC_STATUS },
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+    cursor: objectIdSchema,
+  },
+} as const;
+
+export const rejectVerificationBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    reason: { type: 'string', minLength: 1, maxLength: 500 },
+  },
+} as const;
+
+export const verificationPageResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { type: 'object', properties: verificationProperties } },
+        nextCursor: { type: ['string', 'null'] },
+      },
+    },
   },
 } as const;

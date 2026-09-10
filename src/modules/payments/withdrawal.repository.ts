@@ -178,4 +178,39 @@ export class WithdrawalRepository {
       },
     );
   }
+
+  // Cross-account admin view (GET /admin/withdrawals) — no accountId scoping, unlike listForAccount.
+  async listAll(params: {
+    limit: number;
+    cursor?: string;
+    status?: WithdrawalStatus;
+  }): Promise<WithdrawalPage> {
+    const filter: Filter<WithdrawalDocument> = {};
+    if (params.status) {
+      filter.status = params.status;
+    }
+    if (params.cursor) {
+      filter._id = { $lt: new ObjectId(params.cursor) };
+    }
+
+    const docs = await this.collection
+      .find(filter, { projection: WITHDRAWAL_PROJECTION })
+      .sort({ _id: -1 })
+      .limit(params.limit + 1)
+      .toArray();
+
+    const hasMore = docs.length > params.limit;
+    const items = docs.slice(0, params.limit).map(toDTO);
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? last.id : null };
+  }
+
+  // Admin refund path only (PaymentsService.reverseWithdrawal) — never edits the original ledger
+  // entry, just flips this record's own status once the new credit ledger entry has landed.
+  async markReversed(id: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { status: 'reversed' satisfies WithdrawalStatus, updatedAt: new Date() } },
+    );
+  }
 }

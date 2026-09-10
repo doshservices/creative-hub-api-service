@@ -29,6 +29,7 @@ function buildService(overrides: {
     findByAccountId: vi.fn().mockResolvedValue(null),
     findById: vi.fn().mockResolvedValue(buildVerification({ status: 'pending' })),
     applyResult: vi.fn().mockResolvedValue(buildVerification({ status: 'approved' })),
+    list: vi.fn().mockResolvedValue({ items: [buildVerification()], nextCursor: null }),
     ...overrides.repository,
   };
   const queue: QueueEnqueuerPort = {

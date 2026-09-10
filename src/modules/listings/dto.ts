@@ -1,4 +1,10 @@
-import type { Currency, ListingStatus, PaymentType } from './model.js';
+import type { Currency, ListingStatus, PaymentType, ProjectType } from './model.js';
+
+export interface ListingModerationDTO {
+  flagged: boolean;
+  flaggedReason: string | null;
+  flaggedAt: Date | null;
+}
 
 export interface ListingDTO {
   id: string;
@@ -6,11 +12,17 @@ export interface ListingDTO {
   title: string;
   description: string;
   location: string;
+  category: string;
+  headcount: number;
+  projectType: ProjectType;
   paymentType: PaymentType;
-  amountMinor: number;
+  budgetMinMinor: number;
+  budgetMaxMinor: number;
   currency: Currency;
   duration: string;
   status: ListingStatus;
+  moderation: ListingModerationDTO;
+  applicantCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,4 +30,9 @@ export interface ListingDTO {
 export interface ListingPage {
   items: ListingDTO[];
   nextCursor: string | null;
+}
+
+export interface ListingStatsDTO {
+  activeCount: number;
+  byCategory: Record<string, number>;
 }

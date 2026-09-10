@@ -11,3 +11,8 @@ export interface KycVerificationDTO {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface KycVerificationPage {
+  items: KycVerificationDTO[];
+  nextCursor: string | null;
+}

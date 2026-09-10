@@ -1,7 +1,7 @@
 import type { ClientSession } from 'mongodb';
 import { BadRequestError, ConflictError, NotFoundError } from '../../common/errors.js';
 import { DuplicateIdempotencyKeyError } from './ledger.repository.js';
-import type { LedgerEntryDTO, LedgerPage, WalletDTO } from './dto.js';
+import type { LedgerEntryDTO, LedgerPage, WalletDTO, WalletSummaryDTO } from './dto.js';
 import type { LedgerEntryType } from './ledger.model.js';
 
 export const DEFAULT_CURRENCY = 'NGN';
@@ -29,6 +29,27 @@ export interface WalletRepositoryPort {
   reconcile(walletId: string): Promise<{ balanceMinor: number; heldMinor: number }>;
 }
 
+// Repository-facing: from/to are already-validated Date instances.
+export interface AdminLedgerPageParams {
+  limit: number;
+  cursor?: string;
+  accountId?: string;
+  from?: Date;
+  to?: Date;
+}
+
+// Service-facing: from/to arrive as the raw ISO query-string values; the service validates and
+// converts them to Date before calling the repository, the same defense-in-depth
+// belt-and-suspenders pattern as assertPositiveInteger below (schema validation at the route is
+// the first line of defense, this is the second).
+export interface AdminLedgerQueryParams {
+  limit: number;
+  cursor?: string;
+  accountId?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface LedgerRepositoryPort {
   create(
     input: {
@@ -48,6 +69,8 @@ export interface LedgerRepositoryPort {
   findById(id: string): Promise<LedgerEntryDTO | null>;
   findByRelatedEntryId(relatedEntryId: string): Promise<LedgerEntryDTO[]>;
   listByWallet(walletId: string, params: PageParams): Promise<LedgerPage>;
+  sumCreditsForWallet(walletId: string): Promise<number>;
+  listAll(params: AdminLedgerPageParams): Promise<LedgerPage>;
 }
 
 export interface TransactionRunnerPort {
@@ -70,6 +93,20 @@ function assertPositiveInteger(amountMinor: number): void {
   }
 }
 
+// Belt-and-suspenders: the route schema already validates the ISO date-time format, this is the
+// second line of defense so a malformed value fails clearly here rather than reaching Mongo as
+// an Invalid Date.
+function parseOptionalDate(value: string | undefined, label: string): Date | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError(`${label} must be a valid ISO date`);
+  }
+  return date;
+}
+
 export class WalletService {
   constructor(
     private readonly wallets: WalletRepositoryPort,
@@ -89,6 +126,32 @@ export class WalletService {
   ): Promise<LedgerPage> {
     const wallet = await this.wallets.getOrCreate(accountId, currency);
     return this.ledger.listByWallet(wallet.id, params);
+  }
+
+  // availableMinor/heldMinor come straight off the materialized WalletDocument fields (via the
+  // already-derived WalletDTO); totalEarnedMinor is a live aggregation over credit ledger entries
+  // — recomputed on every call, never stored. See the money-and-ledger skill.
+  async getSummary(accountId: string, currency: string): Promise<WalletSummaryDTO> {
+    const wallet = await this.wallets.getOrCreate(accountId, currency);
+    const totalEarnedMinor = await this.ledger.sumCreditsForWallet(wallet.id);
+    return {
+      availableMinor: wallet.availableMinor,
+      heldMinor: wallet.heldMinor,
+      totalEarnedMinor,
+    };
+  }
+
+  // Cross-account admin read (GET /admin/ledger) — read-only, gated by WALLET_ADMIN at the route.
+  async listAllLedger(params: AdminLedgerQueryParams): Promise<LedgerPage> {
+    const from = parseOptionalDate(params.from, '"from"');
+    const to = parseOptionalDate(params.to, '"to"');
+    return this.ledger.listAll({
+      limit: params.limit,
+      ...(params.cursor ? { cursor: params.cursor } : {}),
+      ...(params.accountId ? { accountId: params.accountId } : {}),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+    });
   }
 
   // Every ledger-writing operation (credit/debit/hold) funnels through here: idempotency

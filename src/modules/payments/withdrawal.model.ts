@@ -1,6 +1,9 @@
 import type { ObjectId } from 'mongodb';
 
-export type WithdrawalStatus = 'pending' | 'processing' | 'completed' | 'failed';
+// 'reversed' is a terminal state reached only from 'completed' via an admin refund — see
+// PaymentsService.reverseWithdrawal. It never edits the original ledger capture entry; a new
+// credit ledger entry pays the funds back (money-and-ledger skill).
+export type WithdrawalStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'reversed';
 
 export interface WithdrawalDocument {
   _id: ObjectId;
@@ -24,4 +27,6 @@ export interface WithdrawalDocument {
 export const withdrawalIndexes = [
   { key: { accountId: 1, _id: -1 }, name: 'accountId_id', unique: false },
   { key: { reference: 1 }, name: 'reference_unique', unique: true },
+  // Backs the admin cross-account list (GET /admin/withdrawals), optionally filtered by status.
+  { key: { status: 1, _id: -1 }, name: 'status_id', unique: false },
 ] as const;

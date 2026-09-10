@@ -132,4 +132,54 @@ export class LedgerRepository {
     const last = items[items.length - 1];
     return { items, nextCursor: hasMore && last ? last.id : null };
   }
+
+  // Live aggregation backing GET /me/summary's totalEarnedMinor — sum of `credit`-type entries
+  // for the wallet, computed fresh on every call, never a stored/cached field. See the
+  // money-and-ledger skill's "derived, never patched" rule (same principle as balance itself).
+  async sumCreditsForWallet(walletId: string): Promise<number> {
+    const pipeline = [
+      { $match: { walletId: new ObjectId(walletId), type: 'credit' as const } },
+      { $group: { _id: null, totalMinor: { $sum: '$amountMinor' } } },
+    ];
+    const [result] = await this.collection
+      .aggregate<{ totalMinor: number }>(pipeline)
+      .toArray();
+    return result?.totalMinor ?? 0;
+  }
+
+  // Cross-account admin view (GET /admin/ledger): optionally scoped to one accountId and/or a
+  // createdAt date range, cursor-paginated the same way as listByWallet. Read-only — no mutation
+  // path lives here (mutations stay in the modules that actually initiate them, per the plan).
+  async listAll(params: {
+    limit: number;
+    cursor?: string;
+    accountId?: string;
+    from?: Date;
+    to?: Date;
+  }): Promise<LedgerPage> {
+    const filter: Filter<LedgerEntryDocument> = {};
+    if (params.accountId) {
+      filter.accountId = new ObjectId(params.accountId);
+    }
+    if (params.cursor) {
+      filter._id = { $lt: new ObjectId(params.cursor) };
+    }
+    if (params.from || params.to) {
+      filter.createdAt = {
+        ...(params.from ? { $gte: params.from } : {}),
+        ...(params.to ? { $lte: params.to } : {}),
+      };
+    }
+
+    const docs = await this.collection
+      .find(filter, { projection: LEDGER_PROJECTION })
+      .sort({ _id: -1 })
+      .limit(params.limit + 1)
+      .toArray();
+
+    const hasMore = docs.length > params.limit;
+    const items = docs.slice(0, params.limit).map(toDTO);
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? last.id : null };
+  }
 }

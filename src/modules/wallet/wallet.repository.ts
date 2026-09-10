@@ -127,6 +127,35 @@ export class WalletRepository {
     return result ? toDTO(result) : null;
   }
 
+  // Batch lookup for cross-module composition (e.g. a future admin module's Manage
+  // Talents/Employers tables) — one query with $in, explicit projection, no N+1. Wallets not
+  // found for a given accountId (never transacted) are simply absent from the returned map
+  // rather than synthesized as zero, since no wallet document exists yet for them.
+  async getBalancesByAccountIds(
+    accountIds: string[],
+    currency: string,
+  ): Promise<Record<string, { balanceMinor: number; heldMinor: number; currency: string }>> {
+    if (accountIds.length === 0) {
+      return {};
+    }
+    const docs = await this.collection
+      .find(
+        { accountId: { $in: accountIds.map((id) => new ObjectId(id)) }, currency },
+        { projection: WALLET_PROJECTION },
+      )
+      .toArray();
+
+    const result: Record<string, { balanceMinor: number; heldMinor: number; currency: string }> = {};
+    for (const doc of docs) {
+      result[doc.accountId.toHexString()] = {
+        balanceMinor: doc.balanceMinor,
+        heldMinor: doc.heldMinor,
+        currency: doc.currency,
+      };
+    }
+    return result;
+  }
+
   // Recomputes balance/held straight from the ledger — used to verify the materialized cache
   // hasn't drifted, per the money-and-ledger skill's reconciliation requirement.
   async reconcile(walletId: string): Promise<{ balanceMinor: number; heldMinor: number }> {

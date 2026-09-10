@@ -14,6 +14,7 @@ export interface CreativeProfileDocument {
   accountId: ObjectId;
   primaryRole: string;
   bio: string | null;
+  location: string | null;
   profilePhotoKey: string | null;
   skills: string[];
   yearsOfExperience: YearsOfExperience | null;
@@ -23,10 +24,20 @@ export interface CreativeProfileDocument {
   availableToTravel: boolean | null;
   hourlyRateBand: HourlyRateBand | null;
   projectRateBand: ProjectRateBand | null;
+  // Rating cache maintained only by the `review.created` event subscriber's atomic `$inc` (see
+  // events.ts) — never read-modify-written, never set from a route. `ratingAvg` is derived from
+  // these two in the DTO layer (repository.ts), not stored, so it can never drift into an
+  // inconsistent float via a race — see CLAUDE.md's money/derived-value reasoning applied here.
+  ratingSum: number;
+  ratingCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export const creativeProfileIndexes = [
   { key: { accountId: 1 }, name: 'accountId_unique', unique: true },
+  // Supports GET /talents?category=... (prefix match against primaryRole) sorted by _id desc.
+  { key: { primaryRole: 1, _id: -1 }, name: 'primaryRole_id', unique: false },
+  // Supports GET /talents?location=... sorted by _id desc.
+  { key: { location: 1, _id: -1 }, name: 'location_id', unique: false },
 ] as const;

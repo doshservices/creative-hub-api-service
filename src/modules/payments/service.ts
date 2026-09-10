@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../../common/errors.js';
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../common/errors.js';
 import type { DepositDTO, DepositPage, WithdrawalDTO, WithdrawalPage } from './dto.js';
+import type { DepositStatus } from './deposit.model.js';
+import type { WithdrawalStatus } from './withdrawal.model.js';
 import type { InitiatePaymentResult, InitiateTransferResult, VerifyTransactionResult, VerifyTransferResult } from './provider.js';
 
 export const DEFAULT_CURRENCY = 'NGN';
@@ -8,6 +10,18 @@ export const DEFAULT_CURRENCY = 'NGN';
 export interface PageParams {
   limit: number;
   cursor?: string;
+}
+
+export interface AdminDepositPageParams {
+  limit: number;
+  cursor?: string;
+  status?: DepositStatus;
+}
+
+export interface AdminWithdrawalPageParams {
+  limit: number;
+  cursor?: string;
+  status?: WithdrawalStatus;
 }
 
 export interface InitiateDepositInput {

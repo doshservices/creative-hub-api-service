@@ -129,4 +129,30 @@ export class DepositRepository {
       { $set: { status: 'failed' satisfies DepositStatus, failureReason, updatedAt: new Date() } },
     );
   }
+
+  // Cross-account admin view (GET /admin/deposits) — no accountId scoping, unlike listForAccount.
+  async listAll(params: {
+    limit: number;
+    cursor?: string;
+    status?: DepositStatus;
+  }): Promise<DepositPage> {
+    const filter: Filter<DepositDocument> = {};
+    if (params.status) {
+      filter.status = params.status;
+    }
+    if (params.cursor) {
+      filter._id = { $lt: new ObjectId(params.cursor) };
+    }
+
+    const docs = await this.collection
+      .find(filter, { projection: DEPOSIT_PROJECTION })
+      .sort({ _id: -1 })
+      .limit(params.limit + 1)
+      .toArray();
+
+    const hasMore = docs.length > params.limit;
+    const items = docs.slice(0, params.limit).map(toDTO);
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? last.id : null };
+  }
 }

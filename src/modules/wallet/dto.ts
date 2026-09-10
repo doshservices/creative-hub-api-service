@@ -28,3 +28,11 @@ export interface LedgerPage {
   items: LedgerEntryDTO[];
   nextCursor: string | null;
 }
+
+export interface WalletSummaryDTO {
+  availableMinor: number;
+  heldMinor: number;
+  // Live aggregation over `credit` ledger entries for the wallet — never a stored/cached field,
+  // recomputed on every read. See the money-and-ledger skill's "derived, never patched" rule.
+  totalEarnedMinor: number;
+}

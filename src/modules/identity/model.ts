@@ -23,4 +23,7 @@ export interface KycVerificationDocument {
 
 export const kycVerificationIndexes = [
   { key: { accountId: 1 }, name: 'accountId_unique', unique: true },
+  // Serves the admin review queue: GET /admin/verifications?status=pending, cursor-paginated on
+  // _id (equality prefix on status, then the sort/range key) — see mongo-repositories rule.
+  { key: { status: 1, _id: -1 }, name: 'status_id', unique: false },
 ] as const;

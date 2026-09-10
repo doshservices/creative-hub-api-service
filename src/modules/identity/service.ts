@@ -1,6 +1,6 @@
 import { NotFoundError } from '../../common/errors.js';
-import type { KycVerificationDTO } from './dto.js';
-import type { DocumentType } from './model.js';
+import type { KycVerificationDTO, KycVerificationPage } from './dto.js';
+import type { DocumentType, KycStatus } from './model.js';
 
 export interface SubmitVerificationInput {
   documentKey: string;
@@ -18,6 +18,7 @@ export interface KycRepositoryPort {
     providerReference: string | null,
     failureReason: string | null,
   ): Promise<KycVerificationDTO | null>;
+  list(params: { status?: KycStatus; limit: number; cursor?: string }): Promise<KycVerificationPage>;
 }
 
 export interface QueueEnqueuerPort {
@@ -30,6 +31,7 @@ export interface AuditRecorderPort {
     action: string;
     targetType: string;
     targetId: string;
+    metadata?: Record<string, unknown>;
   }): Promise<unknown>;
 }
 
@@ -92,5 +94,70 @@ export class IdentityService {
       targetType: 'kyc_verification',
       targetId: updated.id,
     });
+  }
+
+  // Admin review queue — a manual override that exists alongside the Prembly webhook path
+  // above, not a replacement for it.
+  async listVerifications(params: {
+    status?: KycStatus;
+    limit: number;
+    cursor?: string;
+  }): Promise<KycVerificationPage> {
+    return this.repository.list(params);
+  }
+
+  // actorId here is the reviewing admin, not the verification's own accountId — unlike
+  // applyProviderResult's audit above, which is a system-triggered action attributed to the
+  // account it's about.
+  async approveVerification(actorId: string, verificationId: string): Promise<KycVerificationDTO> {
+    const existing = await this.repository.findById(verificationId);
+    if (!existing) {
+      throw new NotFoundError('Verification not found');
+    }
+    if (existing.status === 'approved') {
+      return existing;
+    }
+
+    const updated = await this.repository.applyResult(verificationId, 'approved', null, null);
+    if (!updated) {
+      throw new NotFoundError('Verification not found');
+    }
+
+    await this.audit.record({
+      actorId,
+      action: 'identity.kyc_approved',
+      targetType: 'kyc_verification',
+      targetId: updated.id,
+      metadata: { accountId: updated.accountId },
+    });
+    return updated;
+  }
+
+  async rejectVerification(
+    actorId: string,
+    verificationId: string,
+    reason: string | null,
+  ): Promise<KycVerificationDTO> {
+    const existing = await this.repository.findById(verificationId);
+    if (!existing) {
+      throw new NotFoundError('Verification not found');
+    }
+    if (existing.status === 'rejected') {
+      return existing;
+    }
+
+    const updated = await this.repository.applyResult(verificationId, 'rejected', null, reason);
+    if (!updated) {
+      throw new NotFoundError('Verification not found');
+    }
+
+    await this.audit.record({
+      actorId,
+      action: 'identity.kyc_rejected',
+      targetType: 'kyc_verification',
+      targetId: updated.id,
+      metadata: { accountId: updated.accountId, reason },
+    });
+    return updated;
   }
 }

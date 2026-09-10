@@ -46,6 +46,7 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_REVIEW,
+        PERMISSIONS.EMPLOYER_PROFILE_WRITE,
       ];
 }
 

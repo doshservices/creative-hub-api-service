@@ -1,3 +1,5 @@
+import { objectIdSchema } from '../../common/schema.js';
+
 const LEDGER_ENTRY_TYPES = ['credit', 'debit', 'hold', 'hold_release', 'hold_capture'] as const;
 
 export const walletQuerySchema = {
@@ -13,6 +15,26 @@ export const ledgerQuerySchema = {
   additionalProperties: false,
   properties: {
     currency: { type: 'string', minLength: 3, maxLength: 3 },
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+    cursor: { type: 'string', pattern: '^[a-f0-9]{24}$' },
+  },
+} as const;
+
+export const summaryQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    currency: { type: 'string', minLength: 3, maxLength: 3 },
+  },
+} as const;
+
+export const adminLedgerQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    accountId: objectIdSchema,
+    from: { type: 'string', format: 'date-time' },
+    to: { type: 'string', format: 'date-time' },
     limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
     cursor: { type: 'string', pattern: '^[a-f0-9]{24}$' },
   },
@@ -48,6 +70,20 @@ const ledgerEntryProperties = {
   reference: { type: ['string', 'null'] },
   description: { type: ['string', 'null'] },
   createdAt: { type: 'string' },
+} as const;
+
+const walletSummaryProperties = {
+  availableMinor: { type: 'integer' },
+  heldMinor: { type: 'integer' },
+  totalEarnedMinor: { type: 'integer' },
+} as const;
+
+export const walletSummaryResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: { type: 'object', properties: walletSummaryProperties },
+  },
 } as const;
 
 export const ledgerPageResponseSchema = {

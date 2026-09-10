@@ -1,4 +1,4 @@
-import type { Collection, Db } from 'mongodb';
+import type { Collection, Db, Filter } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import {
   kycVerificationIndexes,
@@ -6,7 +6,7 @@ import {
   type KycStatus,
   type KycVerificationDocument,
 } from './model.js';
-import type { KycVerificationDTO } from './dto.js';
+import type { KycVerificationDTO, KycVerificationPage } from './dto.js';
 
 const VERIFICATION_PROJECTION = {
   accountId: 1,
@@ -134,5 +134,45 @@ export class KycVerificationRepository {
       { _id: new ObjectId(id) },
       { $set: { status: 'failed', failureReason: reason, updatedAt: new Date() } },
     );
+  }
+
+  // Admin review queue: GET /admin/verifications?status=&limit=&cursor= — same _id-descending
+  // cursor convention as every other list method in this codebase (see listings/repository.ts).
+  async list(params: { status?: KycStatus; limit: number; cursor?: string }): Promise<KycVerificationPage> {
+    const filter: Filter<KycVerificationDocument> = {};
+    if (params.status) {
+      filter.status = params.status;
+    }
+    if (params.cursor) {
+      filter._id = { $lt: new ObjectId(params.cursor) };
+    }
+
+    const docs = await this.collection
+      .find(filter, { projection: VERIFICATION_PROJECTION })
+      .sort({ _id: -1 })
+      .limit(params.limit + 1)
+      .toArray();
+
+    const hasMore = docs.length > params.limit;
+    const items = docs.slice(0, params.limit).map(toDTO);
+    const last = items[items.length - 1];
+    return { items, nextCursor: hasMore && last ? last.id : null };
+  }
+
+  // Batch/projected accessor for other modules (via index.ts) — never returns documentKey or
+  // any other field beyond what a status lookup needs.
+  async findStatusesByAccountIds(
+    accountIds: string[],
+  ): Promise<Array<{ accountId: string; status: KycStatus }>> {
+    if (accountIds.length === 0) {
+      return [];
+    }
+    const docs = await this.collection
+      .find(
+        { accountId: { $in: accountIds.map((id) => new ObjectId(id)) } },
+        { projection: { accountId: 1, status: 1 } },
+      )
+      .toArray();
+    return docs.map((doc) => ({ accountId: doc.accountId.toHexString(), status: doc.status }));
   }
 }

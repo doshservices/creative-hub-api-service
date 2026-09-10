@@ -22,6 +22,7 @@ import paymentsModule from './modules/payments/index.js';
 import rbacModule from './modules/rbac/index.js';
 import filesModule from './modules/files/index.js';
 import collaborationModule from './modules/collaboration/index.js';
+import eventsModule from './modules/events/index.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Fastify's logger is configured at construction time, before any plugin (including
@@ -76,6 +77,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(rbacModule, { prefix: '/rbac' });
   await app.register(filesModule, { prefix: '/files' });
   await app.register(collaborationModule, { prefix: '/collaboration' });
+  await app.register(eventsModule, { prefix: '/events' });
 
   return app;
 }

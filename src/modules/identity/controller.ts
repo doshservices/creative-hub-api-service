@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { DocumentType } from './model.js';
+import type { DocumentType, KycStatus } from './model.js';
 import type { IdentityService } from './service.js';
 
 export interface SubmitVerificationBody {
@@ -7,6 +7,22 @@ export interface SubmitVerificationBody {
   documentType: DocumentType;
   documentCountry: string;
 }
+
+export interface ListVerificationsQuery {
+  status?: KycStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface VerificationIdParams {
+  id: string;
+}
+
+export interface RejectVerificationBody {
+  reason?: string;
+}
+
+const DEFAULT_LIMIT = 20;
 
 export class IdentityController {
   constructor(private readonly service: IdentityService) {}
@@ -21,6 +37,39 @@ export class IdentityController {
 
   getMyVerification = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const data = await this.service.getMyVerification(request.user.sub);
+    await reply.send({ success: true, data });
+  };
+
+  listVerifications = async (
+    request: FastifyRequest<{ Querystring: ListVerificationsQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const { status, limit, cursor } = request.query;
+    const data = await this.service.listVerifications({
+      limit: limit ?? DEFAULT_LIMIT,
+      ...(status ? { status } : {}),
+      ...(cursor ? { cursor } : {}),
+    });
+    await reply.send({ success: true, data });
+  };
+
+  approveVerification = async (
+    request: FastifyRequest<{ Params: VerificationIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.approveVerification(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
+  rejectVerification = async (
+    request: FastifyRequest<{ Params: VerificationIdParams; Body: RejectVerificationBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.rejectVerification(
+      request.user.sub,
+      request.params.id,
+      request.body?.reason ?? null,
+    );
     await reply.send({ success: true, data });
   };
 }

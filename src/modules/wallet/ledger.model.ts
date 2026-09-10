@@ -28,4 +28,9 @@ export const ledgerEntryIndexes = [
     unique: true,
   },
   { key: { relatedEntryId: 1 }, name: 'relatedEntryId', unique: false },
+  // Backs the admin cross-account ledger view: accountId-filtered page (cursor on _id, which is
+  // monotonic with creation order) as a prefix, and an unfiltered/date-ranged page falls back to
+  // the createdAt index below.
+  { key: { accountId: 1, _id: -1 }, name: 'accountId_id', unique: false },
+  { key: { createdAt: -1 }, name: 'createdAt_desc', unique: false },
 ] as const;

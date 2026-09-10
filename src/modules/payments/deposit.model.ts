@@ -21,4 +21,6 @@ export interface DepositDocument {
 export const depositIndexes = [
   { key: { accountId: 1, _id: -1 }, name: 'accountId_id', unique: false },
   { key: { txRef: 1 }, name: 'txRef_unique', unique: true },
+  // Backs the admin cross-account list (GET /admin/deposits), optionally filtered by status.
+  { key: { status: 1, _id: -1 }, name: 'status_id', unique: false },
 ] as const;

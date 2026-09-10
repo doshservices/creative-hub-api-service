@@ -121,6 +121,25 @@ function buildFakes() {
       const last = pageItems[pageItems.length - 1];
       return Promise.resolve({ items: pageItems, nextCursor: hasMore && last ? last.id : null });
     },
+    sumCreditsForWallet(walletId) {
+      const total = [...ledgerById.values()]
+        .filter((e) => e.walletId === walletId && e.type === 'credit')
+        .reduce((sum, e) => sum + e.amountMinor, 0);
+      return Promise.resolve(total);
+    },
+    listAll({ limit, cursor, accountId, from, to }) {
+      const items = [...ledgerById.values()]
+        .filter((e) => !accountId || e.accountId === accountId)
+        .filter((e) => !from || e.createdAt >= from)
+        .filter((e) => !to || e.createdAt <= to)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      const startIndex = cursor ? items.findIndex((e) => e.id === cursor) + 1 : 0;
+      const page = items.slice(startIndex, startIndex + limit + 1);
+      const hasMore = page.length > limit;
+      const pageItems = page.slice(0, limit);
+      const last = pageItems[pageItems.length - 1];
+      return Promise.resolve({ items: pageItems, nextCursor: hasMore && last ? last.id : null });
+    },
   };
 
   const transactionRunner: TransactionRunnerPort = {
