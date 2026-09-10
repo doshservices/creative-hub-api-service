@@ -7,3 +7,8 @@ export interface AuditEntryDTO {
   metadata: Record<string, unknown>;
   createdAt: Date;
 }
+
+export interface AuditEntryPage {
+  items: AuditEntryDTO[];
+  nextCursor: string | null;
+}

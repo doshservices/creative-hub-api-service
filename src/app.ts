@@ -23,6 +23,9 @@ import rbacModule from './modules/rbac/index.js';
 import filesModule from './modules/files/index.js';
 import collaborationModule from './modules/collaboration/index.js';
 import eventsModule from './modules/events/index.js';
+import adminModule from './modules/admin/index.js';
+import reviewsModule from './modules/reviews/index.js';
+import auditRoutesModule from './modules/audit/index.js';
 
 export async function buildApp(): Promise<FastifyInstance> {
   // Fastify's logger is configured at construction time, before any plugin (including
@@ -78,6 +81,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(filesModule, { prefix: '/files' });
   await app.register(collaborationModule, { prefix: '/collaboration' });
   await app.register(eventsModule, { prefix: '/events' });
+  await app.register(reviewsModule, { prefix: '/reviews' });
+  await app.register(adminModule, { prefix: '/admin' });
+  // Shares the /admin prefix with the admin composition module above — Fastify's per-plugin
+  // encapsulation means two separate module registrations can mount under the same prefix
+  // without colliding, as long as their route paths don't overlap (this adds GET /admin/audit).
+  await app.register(auditRoutesModule, { prefix: '/admin' });
 
   return app;
 }

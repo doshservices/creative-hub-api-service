@@ -133,6 +133,13 @@ export class AccountRepository {
     return docs.map(toDTO);
   }
 
+  // Cheap total count for the admin composition module's stats endpoint — `list()` alone can't
+  // give a total without walking every page. A plain countDocuments, not an aggregation.
+  async count(accountType?: AccountType): Promise<number> {
+    const filter: Filter<AccountDocument> = accountType ? { accountType } : {};
+    return this.collection.countDocuments(filter);
+  }
+
   async list(params: {
     accountType?: AccountType;
     limit: number;

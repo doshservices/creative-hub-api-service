@@ -255,6 +255,32 @@ export class ListingRepository {
     return { activeCount, byCategory };
   }
 
+  // Real aggregation for the admin composition module's platform-wide stat tiles — mirrors
+  // statsForClient's pipeline exactly, just without the per-client $match. See listings/index.ts's
+  // getPlatformListingStats for the plain-function export other modules consume.
+  async platformStats(): Promise<ListingStatsDTO> {
+    const pipeline = [
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          activeCount: { $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] } },
+        },
+      },
+    ];
+    const rows = await this.collection
+      .aggregate<{ _id: string; count: number; activeCount: number }>(pipeline)
+      .toArray();
+
+    const byCategory: Record<string, number> = {};
+    let activeCount = 0;
+    for (const row of rows) {
+      byCategory[row._id] = row.count;
+      activeCount += row.activeCount;
+    }
+    return { activeCount, byCategory };
+  }
+
   private async listByFilter(
     baseFilter: Filter<ListingDocument>,
     { limit, cursor }: { limit: number; cursor?: string },

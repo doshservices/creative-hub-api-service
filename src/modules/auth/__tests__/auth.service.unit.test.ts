@@ -99,6 +99,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_SUBMIT,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ],
     });
     expect(refreshTokens.set).toHaveBeenCalledWith(
@@ -119,6 +120,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_SUBMIT,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ],
     ],
     [
@@ -130,6 +132,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.COLLABORATION_REVIEW,
         PERMISSIONS.EMPLOYER_PROFILE_WRITE,
         PERMISSIONS.EVENTS_WRITE,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {

@@ -119,6 +119,7 @@ describe('auth routes', () => {
       PERMISSIONS.PAYMENTS_INITIATE,
       PERMISSIONS.FILES_UPLOAD,
       PERMISSIONS.COLLABORATION_SUBMIT,
+      PERMISSIONS.REVIEWS_SUBMIT,
     ]);
     expect(account?.status).toBe('active');
   });
@@ -133,6 +134,7 @@ describe('auth routes', () => {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_SUBMIT,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ],
     ],
     [
@@ -144,6 +146,7 @@ describe('auth routes', () => {
         PERMISSIONS.COLLABORATION_REVIEW,
         PERMISSIONS.EMPLOYER_PROFILE_WRITE,
         PERMISSIONS.EVENTS_WRITE,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {

@@ -10,6 +10,7 @@ export const PERMISSIONS = {
   // account's listing (flag/unflag/close-override) — see listings/routes.ts's /admin/* routes.
   LISTINGS_MODERATE: 'listings:moderate',
   HIRING_APPLY: 'hiring:apply',
+  REVIEWS_SUBMIT: 'reviews:submit',
   IDENTITY_VERIFY: 'identity:verify',
   // Distinct from IDENTITY_VERIFY (self-submit): gates the admin manual-review override
   // alongside the Prembly webhook path.

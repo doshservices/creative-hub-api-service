@@ -1,13 +1,22 @@
+import type { Db } from 'mongodb';
 import type { FastifyInstance } from 'fastify';
 import { AccountRepository } from './repository.js';
 import { AuthService } from './service.js';
 import { AuthController } from './controller.js';
 import { registerAuthRoutes } from './routes.js';
+import type { AccountType } from './model.js';
 
 export { AccountRepository } from './repository.js';
 export { AuthService } from './service.js';
 export type { AccountDTO, AccountPage } from './dto.js';
 export type { AccountType } from './model.js';
+
+// Cheap total-count export for the admin composition module's stats endpoint — same "plain
+// function taking db, constructs its own repository" pattern as wallet/index.ts's
+// getBalancesByAccountIds and identity/index.ts's getStatusesByAccountIds.
+export async function countAccounts(db: Db, accountType?: AccountType): Promise<number> {
+  return new AccountRepository(db).count(accountType);
+}
 
 // Not wrapped in fastify-plugin: this module needs its own encapsulated context so the
 // `{ prefix: '/auth' }` passed at registration actually applies to its routes. It still sees

@@ -45,6 +45,7 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_SUBMIT,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ]
     : [
         PERMISSIONS.LISTINGS_WRITE,
@@ -53,6 +54,7 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.COLLABORATION_REVIEW,
         PERMISSIONS.EMPLOYER_PROFILE_WRITE,
         PERMISSIONS.EVENTS_WRITE,
+        PERMISSIONS.REVIEWS_SUBMIT,
       ];
 }
 
