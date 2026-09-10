@@ -49,6 +49,16 @@ export const authTokensResponseSchema = {
   },
 } as const;
 
+export const changePasswordBodySchema = {
+  type: 'object',
+  required: ['currentPassword', 'newPassword'],
+  additionalProperties: false,
+  properties: {
+    currentPassword: { type: 'string', minLength: 8, maxLength: 128 },
+    newPassword: { type: 'string', minLength: 8, maxLength: 128 },
+  },
+} as const;
+
 export const accountResponseSchema = {
   type: 'object',
   properties: {

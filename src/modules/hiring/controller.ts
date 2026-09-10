@@ -8,7 +8,7 @@ export interface ApplyBody {
 }
 
 export interface UpdateApplicationStatusBody {
-  status: Exclude<ApplicationStatus, 'pending'>;
+  status: Exclude<ApplicationStatus, 'pending' | 'withdrawn'>;
 }
 
 export interface ListQuery {
@@ -22,6 +22,18 @@ export interface ListingIdParams {
 
 export interface ApplicationIdParams {
   id: string;
+}
+
+export interface ContractIdParams {
+  id: string;
+}
+
+export interface InvitationIdParams {
+  id: string;
+}
+
+export interface InviteTalentBody {
+  creativeAccountId: string;
 }
 
 const DEFAULT_LIMIT = 20;
@@ -76,11 +88,68 @@ export class HiringController {
     await reply.send({ success: true, data });
   };
 
+  withdrawApplication = async (
+    request: FastifyRequest<{ Params: ApplicationIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.withdrawApplication(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
   listMyContracts = async (
     request: FastifyRequest<{ Querystring: ListQuery }>,
     reply: FastifyReply,
   ): Promise<void> => {
     const data = await this.service.listMyContracts(request.user.sub, pageParams(request.query));
+    await reply.send({ success: true, data });
+  };
+
+  completeContract = async (
+    request: FastifyRequest<{ Params: ContractIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.completeContract(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
+  inviteTalent = async (
+    request: FastifyRequest<{ Params: ListingIdParams; Body: InviteTalentBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.inviteTalent(
+      request.user.sub,
+      request.params.listingId,
+      request.body.creativeAccountId,
+    );
+    await reply.code(201).send({ success: true, data });
+  };
+
+  listMyInvitations = async (
+    request: FastifyRequest<{ Querystring: ListQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.listMyInvitations(request.user.sub, pageParams(request.query));
+    await reply.send({ success: true, data });
+  };
+
+  acceptInvitation = async (
+    request: FastifyRequest<{ Params: InvitationIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.acceptInvitation(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
+  declineInvitation = async (
+    request: FastifyRequest<{ Params: InvitationIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.declineInvitation(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
+  getMyStats = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const data = await this.service.getMyStats(request.user.sub);
     await reply.send({ success: true, data });
   };
 }

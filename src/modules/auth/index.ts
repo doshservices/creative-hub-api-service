@@ -5,7 +5,8 @@ import { AuthController } from './controller.js';
 import { registerAuthRoutes } from './routes.js';
 
 export { AccountRepository } from './repository.js';
-export type { AccountDTO } from './dto.js';
+export { AuthService } from './service.js';
+export type { AccountDTO, AccountPage } from './dto.js';
 export type { AccountType } from './model.js';
 
 // Not wrapped in fastify-plugin: this module needs its own encapsulated context so the

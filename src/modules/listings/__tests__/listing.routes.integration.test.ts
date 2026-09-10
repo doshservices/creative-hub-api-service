@@ -27,8 +27,11 @@ const minimalListing = {
   title: 'Dance Crew Needed for Music Video',
   description: 'Looking for energetic dancers.',
   location: 'Lagos, Nigeria',
+  category: 'dance',
+  projectType: 'onsite',
   paymentType: 'fixed',
-  amountMinor: 10_000_000,
+  budgetMinMinor: 8_000_000,
+  budgetMaxMinor: 10_000_000,
   currency: 'NGN',
   duration: '3 days',
 };
@@ -78,7 +81,16 @@ describe('listings routes', () => {
 
     it('rejects an invalid body', async () => {
       const token = await registerAndGetToken(app, 'client');
-      const response = await createListing(app, token, { amountMinor: -5 });
+      const response = await createListing(app, token, { budgetMinMinor: -5 });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('rejects a budget range where the max is below the min', async () => {
+      const token = await registerAndGetToken(app, 'client');
+      const response = await createListing(app, token, {
+        budgetMinMinor: 10_000_000,
+        budgetMaxMinor: 5_000_000,
+      });
       expect(response.statusCode).toBe(400);
     });
 
@@ -90,7 +102,9 @@ describe('listings routes', () => {
       const body = response.json().data;
       expect(body.title).toBe(minimalListing.title);
       expect(body.status).toBe('open');
-      expect(body.amountMinor).toBe(10_000_000);
+      expect(body.budgetMinMinor).toBe(8_000_000);
+      expect(body.budgetMaxMinor).toBe(10_000_000);
+      expect(body.applicantCount).toBe(0);
     });
   });
 

@@ -1,7 +1,7 @@
-import type { Collection, Db } from 'mongodb';
+import type { Collection, Db, Filter } from 'mongodb';
 import { ObjectId } from 'mongodb';
 import { accountIndexes, type AccountDocument, type AccountType } from './model.js';
-import type { AccountDTO } from './dto.js';
+import type { AccountDTO, AccountPage } from './dto.js';
 
 export interface AccountWithCredentials extends AccountDTO {
   passwordHash: string;
@@ -94,5 +94,62 @@ export class AccountRepository {
       { returnDocument: 'after', projection: ACCOUNT_FIELDS },
     );
     return result ? toDTO(result) : null;
+  }
+
+  // Password verification needs the hash but never the rest of the DTO shape — kept as its own
+  // narrow method rather than widening findById's projection.
+  async findCredentialsById(id: string): Promise<{ id: string; passwordHash: string } | null> {
+    const doc = await this.collection.findOne(
+      { _id: new ObjectId(id) },
+      { projection: { passwordHash: 1 } },
+    );
+    return doc ? { id: doc._id.toHexString(), passwordHash: doc.passwordHash } : null;
+  }
+
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { passwordHash, updatedAt: new Date() } },
+    );
+  }
+
+  // Suspend/reactivate — the caller is responsible for the audit entry, same reasoning as
+  // updatePermissions above.
+  async updateStatus(id: string, status: 'active' | 'suspended'): Promise<AccountDTO | null> {
+    const result = await this.collection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { status, updatedAt: new Date() } },
+      { returnDocument: 'after', projection: ACCOUNT_FIELDS },
+    );
+    return result ? toDTO(result) : null;
+  }
+
+  // Batch lookup for the future admin composition module (Manage Talents/Employers) — a single
+  // $in query, never one findById per row.
+  async findManyByIds(ids: string[]): Promise<AccountDTO[]> {
+    const docs = await this.collection
+      .find({ _id: { $in: ids.map((id) => new ObjectId(id)) } }, { projection: ACCOUNT_FIELDS })
+      .toArray();
+    return docs.map(toDTO);
+  }
+
+  async list(params: {
+    accountType?: AccountType;
+    limit: number;
+    cursor?: string;
+  }): Promise<AccountPage> {
+    const filter: Filter<AccountDocument> = {
+      ...(params.accountType ? { accountType: params.accountType } : {}),
+      ...(params.cursor ? { _id: { $lt: new ObjectId(params.cursor) } } : {}),
+    };
+    const docs = await this.collection
+      .find(filter, { projection: ACCOUNT_FIELDS })
+      .sort({ _id: -1 })
+      .limit(params.limit + 1)
+      .toArray();
+    const hasMore = docs.length > params.limit;
+    const page = docs.slice(0, params.limit);
+    const last = page[page.length - 1];
+    return { items: page.map(toDTO), nextCursor: hasMore && last ? last._id.toHexString() : null };
   }
 }

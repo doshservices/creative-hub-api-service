@@ -1,7 +1,14 @@
 import { objectIdSchema } from '../../common/schema.js';
 
-const APPLICATION_STATUS = ['pending', 'interview_requested', 'accepted', 'rejected'] as const;
+const APPLICATION_STATUS = [
+  'pending',
+  'interview_requested',
+  'accepted',
+  'rejected',
+  'withdrawn',
+] as const;
 const CONTRACT_STATUS = ['active', 'completed', 'cancelled'] as const;
+const INVITATION_STATUS = ['pending', 'accepted', 'declined'] as const;
 
 export const applyBodySchema = {
   type: 'object',
@@ -13,7 +20,8 @@ export const applyBodySchema = {
   },
 } as const;
 
-// Only the transitions a client is allowed to drive — never back to 'pending'.
+// Only the transitions a client is allowed to drive — never back to 'pending', and never
+// 'withdrawn' (that's talent-driven, via PUT /applications/:id/withdraw).
 export const updateApplicationStatusBodySchema = {
   type: 'object',
   required: ['status'],
@@ -29,6 +37,15 @@ export const listQuerySchema = {
   properties: {
     limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
     cursor: objectIdSchema,
+  },
+} as const;
+
+export const inviteTalentBodySchema = {
+  type: 'object',
+  required: ['creativeAccountId'],
+  additionalProperties: false,
+  properties: {
+    creativeAccountId: objectIdSchema,
   },
 } as const;
 
@@ -72,8 +89,17 @@ const contractProperties = {
   clientAccountId: { type: 'string' },
   creativeAccountId: { type: 'string' },
   status: { type: 'string', enum: CONTRACT_STATUS },
+  escrowHoldEntryId: { type: ['string', 'null'] },
   createdAt: { type: 'string' },
   updatedAt: { type: 'string' },
+} as const;
+
+export const contractResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: { type: 'object', properties: contractProperties },
+  },
 } as const;
 
 export const contractPageResponseSchema = {
@@ -85,6 +111,55 @@ export const contractPageResponseSchema = {
       properties: {
         items: { type: 'array', items: { type: 'object', properties: contractProperties } },
         nextCursor: { type: ['string', 'null'] },
+      },
+    },
+  },
+} as const;
+
+const invitationProperties = {
+  id: { type: 'string' },
+  listingId: { type: 'string' },
+  clientAccountId: { type: 'string' },
+  creativeAccountId: { type: 'string' },
+  status: { type: 'string', enum: INVITATION_STATUS },
+  createdAt: { type: 'string' },
+  updatedAt: { type: 'string' },
+} as const;
+
+export const invitationResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: { type: 'object', properties: invitationProperties },
+  },
+} as const;
+
+export const invitationPageResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        items: { type: 'array', items: { type: 'object', properties: invitationProperties } },
+        nextCursor: { type: ['string', 'null'] },
+      },
+    },
+  },
+} as const;
+
+// Permissive union: a creative caller gets {activeContracts, pendingApplications}, a client
+// caller gets {applicantsWaiting} — see HiringService.getMyStats.
+export const hiringStatsResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        activeContracts: { type: 'integer' },
+        pendingApplications: { type: 'integer' },
+        applicantsWaiting: { type: 'integer' },
       },
     },
   },

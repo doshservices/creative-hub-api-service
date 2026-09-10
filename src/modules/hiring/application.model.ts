@@ -1,6 +1,11 @@
 import type { ObjectId } from 'mongodb';
 
-export type ApplicationStatus = 'pending' | 'interview_requested' | 'accepted' | 'rejected';
+export type ApplicationStatus =
+  | 'pending'
+  | 'interview_requested'
+  | 'accepted'
+  | 'rejected'
+  | 'withdrawn';
 
 export interface ApplicationDocument {
   _id: ObjectId;

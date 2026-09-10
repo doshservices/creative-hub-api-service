@@ -49,6 +49,7 @@ export interface DepositRepositoryPort {
   setCheckoutUrl(id: string, checkoutUrl: string): Promise<void>;
   markCompleted(id: string, providerTransactionId: string): Promise<unknown>;
   markFailed(id: string, reason: string): Promise<void>;
+  listAll(params: AdminDepositPageParams): Promise<DepositPage>;
 }
 
 export interface WithdrawalRepositoryPort {
@@ -68,6 +69,8 @@ export interface WithdrawalRepositoryPort {
   markProcessing(id: string, providerTransferId: string): Promise<void>;
   markCompleted(id: string): Promise<void>;
   markFailed(id: string, reason: string): Promise<void>;
+  listAll(params: AdminWithdrawalPageParams): Promise<WithdrawalPage>;
+  markReversed(id: string): Promise<void>;
 }
 
 export interface WalletMovementPort {
@@ -340,5 +343,48 @@ export class PaymentsService {
       return;
     }
     await this.deposits.markFailed(depositId, reason);
+  }
+
+  // Admin, cross-account reads — gated by PAYMENTS_ADMIN at the route, not ownership (there is
+  // no single owner for these lists).
+  async listAdminDeposits(params: AdminDepositPageParams): Promise<DepositPage> {
+    return this.deposits.listAll(params);
+  }
+
+  async listAdminWithdrawals(params: AdminWithdrawalPageParams): Promise<WithdrawalPage> {
+    return this.withdrawals.listAll(params);
+  }
+
+  // A refund: only a completed (i.e. already paid out) withdrawal can be reversed, and only
+  // once — this is a NEW credit ledger entry paying the funds back, never an edit of the
+  // original capture (see money-and-ledger skill). Idempotent on the withdrawal id, so a retried
+  // reverse call can't double-credit.
+  async reverseWithdrawal(actorId: string, withdrawalId: string): Promise<WithdrawalDTO> {
+    const withdrawal = await this.withdrawals.findById(withdrawalId);
+    if (!withdrawal) {
+      throw new NotFoundError('Withdrawal not found');
+    }
+    if (withdrawal.status !== 'completed') {
+      throw new ConflictError('Only a completed withdrawal can be reversed');
+    }
+
+    await this.wallet.credit(withdrawal.accountId, withdrawal.currency, withdrawal.amountMinor, {
+      idempotencyKey: `withdrawal:${withdrawal.reference}:reverse`,
+      reference: withdrawal.reference,
+      description: 'Withdrawal reversed by admin',
+    });
+    await this.withdrawals.markReversed(withdrawalId);
+    await this.audit.record({
+      actorId,
+      action: 'payments.withdrawal_reversed',
+      targetType: 'withdrawal',
+      targetId: withdrawalId,
+    });
+
+    const updated = await this.withdrawals.findById(withdrawalId);
+    if (!updated) {
+      throw new NotFoundError('Withdrawal not found');
+    }
+    return updated;
   }
 }

@@ -4,12 +4,25 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../app.js';
 import type { AccountType } from '../../auth/model.js';
+import { WalletRepository } from '../../wallet/wallet.repository.js';
+import { LedgerRepository } from '../../wallet/ledger.repository.js';
+import { WalletService } from '../../wallet/service.js';
+import { createTransactionRunner } from '../../wallet/index.js';
 
 function uniqueEmail(): string {
   return `test-${randomUUID()}@example.com`;
 }
 
-async function registerAndGetToken(app: FastifyInstance, accountType: AccountType) {
+function buildTestWalletService(app: FastifyInstance): WalletService {
+  const wallets = new WalletRepository(app.mongo.db);
+  const ledger = new LedgerRepository(app.mongo.db);
+  return new WalletService(wallets, ledger, createTransactionRunner(app), app.audit);
+}
+
+async function registerAndGetToken(
+  app: FastifyInstance,
+  accountType: AccountType,
+): Promise<{ token: string; accountId: string }> {
   const response = await app.inject({
     method: 'POST',
     url: '/auth/register',
@@ -21,22 +34,37 @@ async function registerAndGetToken(app: FastifyInstance, accountType: AccountTyp
       accountType,
     },
   });
-  return response.json().data.accessToken as string;
+  const token = response.json().data.accessToken as string;
+  const payload = app.jwt.decode<{ sub: string }>(token);
+  return { token, accountId: payload?.sub as string };
 }
 
 const minimalListing = {
   title: 'Dance Crew Needed',
   description: 'Looking for dancers.',
   location: 'Lagos, Nigeria',
+  category: 'dance',
+  projectType: 'onsite',
   paymentType: 'fixed',
-  amountMinor: 10_000_000,
+  budgetMinMinor: 8_000_000,
+  budgetMaxMinor: 10_000_000,
   currency: 'NGN',
   duration: '3 days',
 };
 
-async function setupActiveContract(app: FastifyInstance) {
-  const clientToken = await registerAndGetToken(app, 'client');
-  const creativeToken = await registerAndGetToken(app, 'creative');
+async function setupActiveContract(
+  app: FastifyInstance,
+  walletService: WalletService,
+): Promise<{ clientToken: string; creativeToken: string; contractId: string }> {
+  const client = await registerAndGetToken(app, 'client');
+  const creative = await registerAndGetToken(app, 'creative');
+  const clientToken = client.token;
+  const creativeToken = creative.token;
+  // Escrow is funded (a wallet hold) the moment a client accepts an application — see
+  // HiringService.persistContractWithEscrow — so the client's wallet needs a real balance first.
+  await walletService.credit(client.accountId, 'NGN', 20_000_000, {
+    idempotencyKey: `test-fund-${client.accountId}`,
+  });
 
   const listingResponse = await app.inject({
     method: 'POST',
@@ -87,10 +115,12 @@ async function confirmedFile(app: FastifyInstance, token: string) {
 
 describe('collaboration routes', () => {
   let app: FastifyInstance;
+  let walletService: WalletService;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
+    walletService = buildTestWalletService(app);
   });
 
   afterAll(async () => {
@@ -104,6 +134,8 @@ describe('collaboration routes', () => {
     await app.mongo.db.collection('contracts').deleteMany({});
     await app.mongo.db.collection('files').deleteMany({});
     await app.mongo.db.collection('deliverables').deleteMany({});
+    await app.mongo.db.collection('wallets').deleteMany({});
+    await app.mongo.db.collection('ledgerEntries').deleteMany({});
   });
 
   describe('POST /collaboration/contracts/:contractId/deliverables', () => {
@@ -117,7 +149,7 @@ describe('collaboration routes', () => {
     });
 
     it('rejects a client account (lacks collaboration:submit)', async () => {
-      const { clientToken, contractId } = await setupActiveContract(app);
+      const { clientToken, contractId } = await setupActiveContract(app, walletService);
       const fileId = await confirmedFile(app, clientToken);
 
       const response = await app.inject({
@@ -130,8 +162,8 @@ describe('collaboration routes', () => {
     });
 
     it('rejects a creative who is not the one on this contract', async () => {
-      const { contractId } = await setupActiveContract(app);
-      const otherCreativeToken = await registerAndGetToken(app, 'creative');
+      const { contractId } = await setupActiveContract(app, walletService);
+      const { token: otherCreativeToken } = await registerAndGetToken(app, 'creative');
       const fileId = await confirmedFile(app, otherCreativeToken);
 
       const response = await app.inject({
@@ -144,7 +176,7 @@ describe('collaboration routes', () => {
     });
 
     it('rejects a file that has not been confirmed', async () => {
-      const { creativeToken, contractId } = await setupActiveContract(app);
+      const { creativeToken, contractId } = await setupActiveContract(app, walletService);
       const createResponse = await app.inject({
         method: 'POST',
         url: '/files/upload-url',
@@ -163,7 +195,7 @@ describe('collaboration routes', () => {
     });
 
     it('submits a deliverable for the active contract', async () => {
-      const { creativeToken, contractId } = await setupActiveContract(app);
+      const { creativeToken, contractId } = await setupActiveContract(app, walletService);
       const fileId = await confirmedFile(app, creativeToken);
 
       const response = await app.inject({
@@ -185,8 +217,8 @@ describe('collaboration routes', () => {
 
   describe('GET /collaboration/contracts/:contractId/deliverables', () => {
     it('rejects an account not party to the contract', async () => {
-      const { contractId } = await setupActiveContract(app);
-      const outsiderToken = await registerAndGetToken(app, 'client');
+      const { contractId } = await setupActiveContract(app, walletService);
+      const { token: outsiderToken } = await registerAndGetToken(app, 'client');
 
       const response = await app.inject({
         method: 'GET',
@@ -197,7 +229,7 @@ describe('collaboration routes', () => {
     });
 
     it('lists deliverables for the client', async () => {
-      const { clientToken, creativeToken, contractId } = await setupActiveContract(app);
+      const { clientToken, creativeToken, contractId } = await setupActiveContract(app, walletService);
       const fileId = await confirmedFile(app, creativeToken);
       await app.inject({
         method: 'POST',
@@ -218,7 +250,7 @@ describe('collaboration routes', () => {
 
   describe('PUT /collaboration/deliverables/:id/review', () => {
     async function setupDeliverable(app: FastifyInstance) {
-      const { clientToken, creativeToken, contractId } = await setupActiveContract(app);
+      const { clientToken, creativeToken, contractId } = await setupActiveContract(app, walletService);
       const fileId = await confirmedFile(app, creativeToken);
       const submitResponse = await app.inject({
         method: 'POST',
@@ -246,7 +278,7 @@ describe('collaboration routes', () => {
 
     it('rejects a client who is not on this contract', async () => {
       const { deliverableId } = await setupDeliverable(app);
-      const otherClientToken = await registerAndGetToken(app, 'client');
+      const { token: otherClientToken } = await registerAndGetToken(app, 'client');
 
       const response = await app.inject({
         method: 'PUT',

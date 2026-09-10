@@ -48,6 +48,11 @@ function buildService(overrides: {
     findByEmailWithCredentials: vi.fn().mockResolvedValue(null),
     create: vi.fn().mockResolvedValue(buildAccount()),
     findById: vi.fn().mockResolvedValue(null),
+    findCredentialsById: vi.fn().mockResolvedValue(null),
+    updatePasswordHash: vi.fn().mockResolvedValue(undefined),
+    updateStatus: vi.fn().mockResolvedValue(buildAccount()),
+    findManyByIds: vi.fn().mockResolvedValue([]),
+    list: vi.fn().mockResolvedValue({ items: [buildAccount()], nextCursor: null }),
     ...overrides.repository,
   };
   const refreshTokens: RefreshTokenStorePort = {
@@ -124,6 +129,7 @@ describe('AuthService.register', () => {
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_REVIEW,
         PERMISSIONS.EMPLOYER_PROFILE_WRITE,
+        PERMISSIONS.EVENTS_WRITE,
       ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
@@ -249,5 +255,75 @@ describe('AuthService.getById', () => {
     const { service } = buildService({});
 
     await expect(service.getById('missing')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  it('rejects when the current password is wrong', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const { service } = buildService({
+      repository: {
+        findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }),
+      },
+    });
+
+    await expect(
+      service.changePassword('account-1', 'wrong-password', 'new-password123'),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it('updates the hash and records an audit entry on success', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const { service, repository, audit } = buildService({
+      repository: {
+        findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }),
+      },
+    });
+
+    await service.changePassword('account-1', 'correct-password', 'new-password123');
+
+    expect(repository.updatePasswordHash).toHaveBeenCalledWith(
+      'account-1',
+      expect.any(String),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'account-1', action: 'auth.password_changed' }),
+    );
+  });
+});
+
+describe('AuthService.suspendAccount / reactivateAccount', () => {
+  it('suspends an account and records an audit entry', async () => {
+    const { service, repository, audit } = buildService({
+      repository: { updateStatus: vi.fn().mockResolvedValue(buildAccount({ status: 'suspended' })) },
+    });
+
+    const result = await service.suspendAccount('admin-1', 'account-1');
+
+    expect(repository.updateStatus).toHaveBeenCalledWith('account-1', 'suspended');
+    expect(result.status).toBe('suspended');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'admin-1', action: 'auth.account_suspended' }),
+    );
+  });
+
+  it('reactivates an account and records an audit entry', async () => {
+    const { service, repository, audit } = buildService({
+      repository: { updateStatus: vi.fn().mockResolvedValue(buildAccount({ status: 'active' })) },
+    });
+
+    const result = await service.reactivateAccount('admin-1', 'account-1');
+
+    expect(repository.updateStatus).toHaveBeenCalledWith('account-1', 'active');
+    expect(result.status).toBe('active');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'admin-1', action: 'auth.account_reactivated' }),
+    );
+  });
+
+  it('throws NotFoundError when the account does not exist', async () => {
+    const { service } = buildService({ repository: { updateStatus: vi.fn().mockResolvedValue(null) } });
+
+    await expect(service.suspendAccount('admin-1', 'missing')).rejects.toThrow();
   });
 });

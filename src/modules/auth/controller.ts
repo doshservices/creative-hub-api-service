@@ -19,6 +19,15 @@ interface RefreshBody {
   refreshToken: string;
 }
 
+export interface ChangePasswordBody {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface AccountIdParams {
+  id: string;
+}
+
 export class AuthController {
   constructor(private readonly service: AuthService) {}
 
@@ -56,6 +65,34 @@ export class AuthController {
 
   me = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const data = await this.service.getById(request.user.sub);
+    await reply.send({ success: true, data });
+  };
+
+  changePassword = async (
+    request: FastifyRequest<{ Body: ChangePasswordBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    await this.service.changePassword(
+      request.user.sub,
+      request.body.currentPassword,
+      request.body.newPassword,
+    );
+    await reply.code(204).send();
+  };
+
+  suspendAccount = async (
+    request: FastifyRequest<{ Params: AccountIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.suspendAccount(request.user.sub, request.params.id);
+    await reply.send({ success: true, data });
+  };
+
+  reactivateAccount = async (
+    request: FastifyRequest<{ Params: AccountIdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.reactivateAccount(request.user.sub, request.params.id);
     await reply.send({ success: true, data });
   };
 }

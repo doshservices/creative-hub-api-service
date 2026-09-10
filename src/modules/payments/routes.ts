@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ForbiddenError } from '../../common/errors.js';
 import { PERMISSIONS } from '../../common/permissions.js';
 import type {
+  AdminDepositListQuery,
+  AdminWithdrawalListQuery,
   FlutterwaveWebhookBody,
   IdParams,
   InitiateDepositBody,
@@ -10,6 +12,8 @@ import type {
   PaymentsController,
 } from './controller.js';
 import {
+  adminDepositQuerySchema,
+  adminWithdrawalQuerySchema,
   depositPageResponseSchema,
   depositResponseSchema,
   flutterwaveWebhookBodySchema,
@@ -28,6 +32,7 @@ export function registerPaymentsRoutes(
   webhookSecretHash: string,
 ): void {
   const requirePaymentsInitiate = app.requirePermission(PERMISSIONS.PAYMENTS_INITIATE);
+  const requirePaymentsAdmin = app.requirePermission(PERMISSIONS.PAYMENTS_ADMIN);
 
   app.post<{ Body: InitiateDepositBody }>(
     '/deposits',
@@ -81,6 +86,37 @@ export function registerPaymentsRoutes(
       schema: { querystring: listQuerySchema, response: { 200: withdrawalPageResponseSchema } },
     },
     controller.listMyWithdrawals,
+  );
+
+  // Admin, cross-account — gated by PAYMENTS_ADMIN, not ownership (there is no single owner).
+  app.get<{ Querystring: AdminDepositListQuery }>(
+    '/admin/deposits',
+    {
+      preHandler: [app.authenticate, requirePaymentsAdmin],
+      schema: { querystring: adminDepositQuerySchema, response: { 200: depositPageResponseSchema } },
+    },
+    controller.listAdminDeposits,
+  );
+
+  app.get<{ Querystring: AdminWithdrawalListQuery }>(
+    '/admin/withdrawals',
+    {
+      preHandler: [app.authenticate, requirePaymentsAdmin],
+      schema: {
+        querystring: adminWithdrawalQuerySchema,
+        response: { 200: withdrawalPageResponseSchema },
+      },
+    },
+    controller.listAdminWithdrawals,
+  );
+
+  app.post<{ Params: IdParams }>(
+    '/admin/withdrawals/:id/reverse',
+    {
+      preHandler: [app.authenticate, requirePaymentsAdmin],
+      schema: { params: idParamSchema, response: { 200: withdrawalResponseSchema } },
+    },
+    controller.reverseWithdrawal,
   );
 
   // Public: Flutterwave calls this directly, so there is no JWT to authenticate — the

@@ -1,4 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { DepositStatus } from './deposit.model.js';
+import type { WithdrawalStatus } from './withdrawal.model.js';
 import type { PageParams, PaymentsService } from './service.js';
 
 export interface InitiateDepositBody {
@@ -20,6 +22,18 @@ export interface IdParams {
 export interface ListQuery {
   limit?: number;
   cursor?: string;
+}
+
+export interface AdminDepositListQuery {
+  limit?: number;
+  cursor?: string;
+  status?: DepositStatus;
+}
+
+export interface AdminWithdrawalListQuery {
+  limit?: number;
+  cursor?: string;
+  status?: WithdrawalStatus;
 }
 
 export interface FlutterwaveWebhookBody {
@@ -82,6 +96,40 @@ export class PaymentsController {
     reply: FastifyReply,
   ): Promise<void> => {
     const data = await this.service.listMyWithdrawals(request.user.sub, pageParams(request.query));
+    await reply.send({ success: true, data });
+  };
+
+  listAdminDeposits = async (
+    request: FastifyRequest<{ Querystring: AdminDepositListQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const { limit, cursor, status } = request.query;
+    const data = await this.service.listAdminDeposits({
+      limit: limit ?? 20,
+      ...(cursor ? { cursor } : {}),
+      ...(status ? { status } : {}),
+    });
+    await reply.send({ success: true, data });
+  };
+
+  listAdminWithdrawals = async (
+    request: FastifyRequest<{ Querystring: AdminWithdrawalListQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const { limit, cursor, status } = request.query;
+    const data = await this.service.listAdminWithdrawals({
+      limit: limit ?? 20,
+      ...(cursor ? { cursor } : {}),
+      ...(status ? { status } : {}),
+    });
+    await reply.send({ success: true, data });
+  };
+
+  reverseWithdrawal = async (
+    request: FastifyRequest<{ Params: IdParams }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.reverseWithdrawal(request.user.sub, request.params.id);
     await reply.send({ success: true, data });
   };
 

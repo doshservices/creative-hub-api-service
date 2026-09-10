@@ -142,6 +142,8 @@ describe('auth routes', () => {
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_REVIEW,
+        PERMISSIONS.EMPLOYER_PROFILE_WRITE,
+        PERMISSIONS.EVENTS_WRITE,
       ],
     ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
@@ -259,6 +261,127 @@ describe('auth routes', () => {
       const body = response.json();
       expect(body.data.email).toBe(email);
       expect(body.data).not.toHaveProperty('passwordHash');
+    });
+  });
+
+  describe('PUT /auth/me/password', () => {
+    it('rejects an unauthenticated request', async () => {
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/auth/me/password',
+        payload: { currentPassword: 'password123', newPassword: 'newpassword456' },
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('rejects the wrong current password', async () => {
+      const registerResponse = await register(app, uniqueEmail());
+      const { accessToken } = registerResponse.json().data;
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/auth/me/password',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { currentPassword: 'wrong-password', newPassword: 'newpassword456' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('changes the password, records an audit entry, and the new password works for login', async () => {
+      const email = uniqueEmail();
+      const registerResponse = await register(app, email);
+      const { accessToken } = registerResponse.json().data;
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: '/auth/me/password',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { currentPassword: 'password123', newPassword: 'newpassword456' },
+      });
+      expect(response.statusCode).toBe(204);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'newpassword456' },
+      });
+      expect(loginResponse.statusCode).toBe(200);
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'auth.password_changed' })
+        .toArray();
+      expect(auditEntries).toHaveLength(1);
+    });
+  });
+
+  describe('admin account suspend/reactivate', () => {
+    async function getAccountId(accessToken: string): Promise<string> {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/auth/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      return response.json().data.id as string;
+    }
+
+    // There's no self-service way to become an admin — a real operator grants this via rbac's
+    // role-assignment flow; directly setting permissions here stands in for that.
+    async function loginAsAdmin(): Promise<string> {
+      const adminEmail = uniqueEmail();
+      await register(app, adminEmail);
+      await app.mongo.db
+        .collection('accounts')
+        .updateOne({ email: adminEmail }, { $set: { permissions: [PERMISSIONS.ADMIN_USERS_MANAGE] } });
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email: adminEmail, password: 'password123' },
+      });
+      return loginResponse.json().data.accessToken as string;
+    }
+
+    it('rejects suspend without ADMIN_USERS_MANAGE', async () => {
+      const targetResponse = await register(app, uniqueEmail());
+      const targetId = await getAccountId(targetResponse.json().data.accessToken);
+      const { accessToken } = (await register(app, uniqueEmail())).json().data;
+
+      const response = await app.inject({
+        method: 'PUT',
+        url: `/auth/admin/accounts/${targetId}/suspend`,
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('suspends and reactivates an account, recording audit entries', async () => {
+      const targetRegisterResponse = await register(app, uniqueEmail());
+      const targetId = await getAccountId(targetRegisterResponse.json().data.accessToken);
+      const adminAccessToken = await loginAsAdmin();
+
+      const suspendResponse = await app.inject({
+        method: 'PUT',
+        url: `/auth/admin/accounts/${targetId}/suspend`,
+        headers: { authorization: `Bearer ${adminAccessToken}` },
+      });
+      expect(suspendResponse.statusCode).toBe(200);
+      expect(suspendResponse.json().data.status).toBe('suspended');
+
+      const reactivateResponse = await app.inject({
+        method: 'PUT',
+        url: `/auth/admin/accounts/${targetId}/reactivate`,
+        headers: { authorization: `Bearer ${adminAccessToken}` },
+      });
+      expect(reactivateResponse.statusCode).toBe(200);
+      expect(reactivateResponse.json().data.status).toBe('active');
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ targetId, action: { $in: ['auth.account_suspended', 'auth.account_reactivated'] } })
+        .toArray();
+      expect(auditEntries).toHaveLength(2);
     });
   });
 });

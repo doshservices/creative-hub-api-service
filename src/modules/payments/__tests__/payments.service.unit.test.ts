@@ -58,6 +58,7 @@ function buildService(overrides: {
     setCheckoutUrl: vi.fn().mockResolvedValue(undefined),
     markCompleted: vi.fn().mockResolvedValue(undefined),
     markFailed: vi.fn().mockResolvedValue(undefined),
+    listAll: vi.fn().mockResolvedValue({ items: [buildDeposit()], nextCursor: null }),
     ...overrides.deposits,
   };
   const withdrawals: WithdrawalRepositoryPort = {
@@ -69,6 +70,8 @@ function buildService(overrides: {
     markProcessing: vi.fn().mockResolvedValue(undefined),
     markCompleted: vi.fn().mockResolvedValue(undefined),
     markFailed: vi.fn().mockResolvedValue(undefined),
+    listAll: vi.fn().mockResolvedValue({ items: [buildWithdrawal()], nextCursor: null }),
+    markReversed: vi.fn().mockResolvedValue(undefined),
     ...overrides.withdrawals,
   };
   const wallet: WalletMovementPort = {
@@ -335,5 +338,56 @@ describe('PaymentsService.failWithdrawalAndReleaseHold', () => {
     await service.failWithdrawalAndReleaseHold('withdrawal-1', 'exhausted retries');
     expect(wallet.releaseHold).not.toHaveBeenCalled();
     expect(withdrawals.markFailed).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentsService.listAdminDeposits / listAdminWithdrawals', () => {
+  it('delegates straight to the repositories (cross-account, no ownership check)', async () => {
+    const { service, deposits, withdrawals } = buildService();
+
+    await service.listAdminDeposits({ limit: 20, status: 'completed' });
+    await service.listAdminWithdrawals({ limit: 20, status: 'pending' });
+
+    expect(deposits.listAll).toHaveBeenCalledWith({ limit: 20, status: 'completed' });
+    expect(withdrawals.listAll).toHaveBeenCalledWith({ limit: 20, status: 'pending' });
+  });
+});
+
+describe('PaymentsService.reverseWithdrawal', () => {
+  it('rejects reversing a withdrawal that is not completed', async () => {
+    const { service } = buildService({
+      withdrawals: { findById: vi.fn().mockResolvedValue(buildWithdrawal({ status: 'pending' })) },
+    });
+
+    await expect(service.reverseWithdrawal('admin-1', 'withdrawal-1')).rejects.toThrow();
+  });
+
+  it('credits the account, marks reversed, and records an audit entry', async () => {
+    const { service, wallet, withdrawals, audit } = buildService({
+      withdrawals: {
+        findById: vi.fn().mockResolvedValue(buildWithdrawal({ status: 'completed' })),
+      },
+    });
+
+    await service.reverseWithdrawal('admin-1', 'withdrawal-1');
+
+    expect(wallet.credit).toHaveBeenCalledWith(
+      'account-1',
+      'NGN',
+      3000,
+      expect.objectContaining({ idempotencyKey: 'withdrawal:wd_abc:reverse' }),
+    );
+    expect(withdrawals.markReversed).toHaveBeenCalledWith('withdrawal-1');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'admin-1', action: 'payments.withdrawal_reversed' }),
+    );
+  });
+
+  it('throws NotFoundError when the withdrawal does not exist', async () => {
+    const { service } = buildService({ withdrawals: { findById: vi.fn().mockResolvedValue(null) } });
+
+    await expect(service.reverseWithdrawal('admin-1', 'missing')).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
   });
 });

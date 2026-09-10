@@ -1,6 +1,6 @@
-import type { Collection, Db, Filter } from 'mongodb';
+import type { ClientSession, Collection, Db, Filter } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { contractIndexes, type ContractDocument } from './contract.model.js';
+import { contractIndexes, type ContractDocument, type ContractStatus } from './contract.model.js';
 import type { ContractDTO, ContractPage } from './dto.js';
 
 export interface CreateContractData {
@@ -8,6 +8,10 @@ export interface CreateContractData {
   applicationId: string;
   clientAccountId: string;
   creativeAccountId: string;
+  // The wallet ledger entry id for the escrow hold funded against the client's wallet before
+  // this contract exists — see service.ts's persistContractWithEscrow. Nullable only so the
+  // repository type doesn't lie about the model; every caller in this codebase supplies one.
+  escrowHoldEntryId: string | null;
 }
 
 const CONTRACT_PROJECTION = {
@@ -16,6 +20,7 @@ const CONTRACT_PROJECTION = {
   clientAccountId: 1,
   creativeAccountId: 1,
   status: 1,
+  escrowHoldEntryId: 1,
   createdAt: 1,
   updatedAt: 1,
 } as const;
@@ -28,6 +33,7 @@ function toDTO(doc: ContractDocument): ContractDTO {
     clientAccountId: doc.clientAccountId.toHexString(),
     creativeAccountId: doc.creativeAccountId.toHexString(),
     status: doc.status,
+    escrowHoldEntryId: doc.escrowHoldEntryId ? doc.escrowHoldEntryId.toHexString() : null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -46,7 +52,7 @@ export class ContractRepository {
     }
   }
 
-  async create(input: CreateContractData): Promise<ContractDTO> {
+  async create(input: CreateContractData, session?: ClientSession): Promise<ContractDTO> {
     const now = new Date();
     const doc: ContractDocument = {
       _id: new ObjectId(),
@@ -55,10 +61,11 @@ export class ContractRepository {
       clientAccountId: new ObjectId(input.clientAccountId),
       creativeAccountId: new ObjectId(input.creativeAccountId),
       status: 'active',
+      escrowHoldEntryId: input.escrowHoldEntryId ? new ObjectId(input.escrowHoldEntryId) : null,
       createdAt: now,
       updatedAt: now,
     };
-    await this.collection.insertOne(doc);
+    await this.collection.insertOne(doc, session ? { session } : {});
     return toDTO(doc);
   }
 
@@ -76,6 +83,31 @@ export class ContractRepository {
       { projection: CONTRACT_PROJECTION },
     );
     return doc ? toDTO(doc) : null;
+  }
+
+  async updateStatus(
+    id: string,
+    status: ContractStatus,
+    session?: ClientSession,
+  ): Promise<ContractDTO | null> {
+    const result = await this.collection.findOneAndUpdate(
+      { _id: new ObjectId(id) },
+      { $set: { status, updatedAt: new Date() } },
+      {
+        returnDocument: 'after',
+        projection: CONTRACT_PROJECTION,
+        ...(session ? { session } : {}),
+      },
+    );
+    return result ? toDTO(result) : null;
+  }
+
+  // Talent-side stat tile: contracts currently in progress.
+  async countActiveForCreative(creativeAccountId: string): Promise<number> {
+    return this.collection.countDocuments({
+      creativeAccountId: new ObjectId(creativeAccountId),
+      status: 'active',
+    });
   }
 
   // An account is only ever a client or a creative, never both, so a single $or query (each

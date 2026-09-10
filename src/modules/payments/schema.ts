@@ -37,6 +37,29 @@ export const listQuerySchema = {
   },
 } as const;
 
+export const adminDepositQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+    cursor: objectIdSchema,
+    status: { type: 'string', enum: ['pending', 'awaiting_payment', 'completed', 'failed'] },
+  },
+} as const;
+
+export const adminWithdrawalQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    limit: { type: 'integer', minimum: 1, maximum: 50, default: 20 },
+    cursor: objectIdSchema,
+    status: {
+      type: 'string',
+      enum: ['pending', 'processing', 'completed', 'failed', 'reversed'],
+    },
+  },
+} as const;
+
 // Loosely shaped on purpose: this is Flutterwave's payload, not client input we control the
 // evolution of — see CLAUDE.md's validation invariant and the third-party-provider skill.
 export const flutterwaveWebhookBodySchema = {
@@ -91,7 +114,7 @@ const withdrawalProperties = {
   reference: { type: 'string' },
   bankCode: { type: 'string' },
   accountNumber: { type: 'string' },
-  status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed'] },
+  status: { type: 'string', enum: ['pending', 'processing', 'completed', 'failed', 'reversed'] },
   failureReason: { type: ['string', 'null'] },
   createdAt: { type: 'string' },
   updatedAt: { type: 'string' },

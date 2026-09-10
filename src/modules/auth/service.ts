@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { ConflictError, UnauthorizedError } from '../../common/errors.js';
+import { ConflictError, NotFoundError, UnauthorizedError } from '../../common/errors.js';
 import { PERMISSIONS } from '../../common/permissions.js';
-import type { AccountDTO, AuthTokensDTO } from './dto.js';
+import type { AccountDTO, AccountPage, AuthTokensDTO } from './dto.js';
 import type { AccountType } from './model.js';
 import { hashPassword, verifyPassword } from './password.js';
 
@@ -26,6 +26,11 @@ export interface AccountRepositoryPort {
     permissions: string[];
   }): Promise<AccountDTO>;
   findById(id: string): Promise<AccountDTO | null>;
+  findCredentialsById(id: string): Promise<{ id: string; passwordHash: string } | null>;
+  updatePasswordHash(id: string, passwordHash: string): Promise<void>;
+  updateStatus(id: string, status: 'active' | 'suspended'): Promise<AccountDTO | null>;
+  findManyByIds(ids: string[]): Promise<AccountDTO[]>;
+  list(params: { accountType?: AccountType; limit: number; cursor?: string }): Promise<AccountPage>;
 }
 
 // 'creative' accounts get hired (own a profile, apply to listings, submit KYC); 'client'
@@ -47,6 +52,7 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_REVIEW,
         PERMISSIONS.EMPLOYER_PROFILE_WRITE,
+        PERMISSIONS.EVENTS_WRITE,
       ];
 }
 
@@ -143,6 +149,71 @@ export class AuthService {
       throw new UnauthorizedError('Account no longer exists');
     }
     return account;
+  }
+
+  // Password change is explicitly audit-required per CLAUDE.md. Full 2FA is not implemented —
+  // out of scope, see the implementation plan doc.
+  async changePassword(
+    accountId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const account = await this.repository.findCredentialsById(accountId);
+    if (!account || !(await verifyPassword(currentPassword, account.passwordHash))) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+    const passwordHash = await hashPassword(newPassword);
+    await this.repository.updatePasswordHash(accountId, passwordHash);
+    await this.audit.record({
+      actorId: accountId,
+      action: 'auth.password_changed',
+      targetType: 'account',
+      targetId: accountId,
+    });
+  }
+
+  // Admin actions below — status/role change is audit-required per CLAUDE.md. actorId is the
+  // administering account, not the account being acted on.
+  async suspendAccount(actorId: string, accountId: string): Promise<AccountDTO> {
+    const updated = await this.repository.updateStatus(accountId, 'suspended');
+    if (!updated) {
+      throw new NotFoundError('Account not found');
+    }
+    await this.audit.record({
+      actorId,
+      action: 'auth.account_suspended',
+      targetType: 'account',
+      targetId: accountId,
+    });
+    return updated;
+  }
+
+  async reactivateAccount(actorId: string, accountId: string): Promise<AccountDTO> {
+    const updated = await this.repository.updateStatus(accountId, 'active');
+    if (!updated) {
+      throw new NotFoundError('Account not found');
+    }
+    await this.audit.record({
+      actorId,
+      action: 'auth.account_reactivated',
+      targetType: 'account',
+      targetId: accountId,
+    });
+    return updated;
+  }
+
+  // Batch/paginated reads for the future admin composition module — not audit-required (reads,
+  // not mutations).
+  async getAccountsByIds(accountIds: string[]): Promise<AccountDTO[]> {
+    return this.repository.findManyByIds(accountIds);
+  }
+
+  async listAccounts(params: {
+    accountType?: AccountType;
+    limit: number;
+    cursor?: string;
+  }): Promise<AccountPage> {
+    return this.repository.list(params);
   }
 
   private async issueTokens(account: AccountDTO): Promise<AuthTokensDTO> {

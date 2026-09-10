@@ -9,6 +9,11 @@ export interface ContractDocument {
   clientAccountId: ObjectId;
   creativeAccountId: ObjectId;
   status: ContractStatus;
+  // References a wallet-module ledger entry (the escrow hold on the client's wallet) — an
+  // opaque cross-module id, never a Mongo $lookup target. Null only for contracts predating
+  // escrow funding; every contract created going forward has one. See service.ts's
+  // persistContractWithEscrow and the money-and-ledger skill.
+  escrowHoldEntryId: ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }

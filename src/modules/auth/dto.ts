@@ -16,3 +16,8 @@ export interface AuthTokensDTO {
   refreshToken: string;
   expiresIn: string;
 }
+
+export interface AccountPage {
+  items: AccountDTO[];
+  nextCursor: string | null;
+}

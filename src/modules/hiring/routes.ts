@@ -4,7 +4,10 @@ import { objectIdSchema } from '../../common/schema.js';
 import type {
   ApplicationIdParams,
   ApplyBody,
+  ContractIdParams,
   HiringController,
+  InvitationIdParams,
+  InviteTalentBody,
   ListingIdParams,
   ListQuery,
   UpdateApplicationStatusBody,
@@ -14,6 +17,11 @@ import {
   applicationResponseSchema,
   applyBodySchema,
   contractPageResponseSchema,
+  contractResponseSchema,
+  hiringStatsResponseSchema,
+  inviteTalentBodySchema,
+  invitationPageResponseSchema,
+  invitationResponseSchema,
   listQuerySchema,
   updateApplicationStatusBodySchema,
 } from './schema.js';
@@ -25,6 +33,14 @@ const listingIdParamSchema = {
 } as const;
 
 const applicationIdParamSchema = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: objectIdSchema },
+} as const;
+
+// Shared by every other single-resource route below (contracts/:id, invitations/:id) — same
+// shape as applicationIdParamSchema, kept separate only for readability at each call site.
+const idParamSchema = {
   type: 'object',
   required: ['id'],
   properties: { id: objectIdSchema },
@@ -78,6 +94,18 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     controller.updateApplicationStatus,
   );
 
+  // Talent-owner only — ownership is checked in the service against the loaded application's
+  // creativeAccountId, never a client-supplied field. Only reachable from pending/
+  // interview_requested (see WITHDRAWABLE_STATUSES in service.ts).
+  app.put<{ Params: ApplicationIdParams }>(
+    '/applications/:id/withdraw',
+    {
+      preHandler: [app.authenticate, requireHiringApply],
+      schema: { params: applicationIdParamSchema, response: { 200: applicationResponseSchema } },
+    },
+    controller.withdrawApplication,
+  );
+
   app.get<{ Querystring: ListQuery }>(
     '/contracts/mine',
     {
@@ -85,5 +113,71 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: { querystring: listQuerySchema, response: { 200: contractPageResponseSchema } },
     },
     controller.listMyContracts,
+  );
+
+  // Client-owner only, only from 'active' — ownership and status are checked in the service
+  // against the loaded contract. Releases escrow to the creative; see completeContract.
+  app.put<{ Params: ContractIdParams }>(
+    '/contracts/:id/complete',
+    {
+      preHandler: app.authenticate,
+      schema: { params: idParamSchema, response: { 200: contractResponseSchema } },
+    },
+    controller.completeContract,
+  );
+
+  // Employer invites a specific talent to their own listing — ownership of the listing is
+  // checked in the service via the listings reader port, never a client-supplied clientAccountId.
+  app.post<{ Params: ListingIdParams; Body: InviteTalentBody }>(
+    '/listings/:listingId/invitations',
+    {
+      preHandler: [app.authenticate, requireListingsWrite],
+      schema: {
+        params: listingIdParamSchema,
+        body: inviteTalentBodySchema,
+        response: { 201: invitationResponseSchema },
+      },
+    },
+    controller.inviteTalent,
+  );
+
+  app.get<{ Querystring: ListQuery }>(
+    '/invitations/mine',
+    {
+      preHandler: [app.authenticate, requireHiringApply],
+      schema: { querystring: listQuerySchema, response: { 200: invitationPageResponseSchema } },
+    },
+    controller.listMyInvitations,
+  );
+
+  // Talent-owner only. Creates an accepted application and funds/creates the contract via the
+  // same escrow path as PUT /applications/:id/status with status 'accepted'.
+  app.put<{ Params: InvitationIdParams }>(
+    '/invitations/:id/accept',
+    {
+      preHandler: [app.authenticate, requireHiringApply],
+      schema: { params: idParamSchema, response: { 200: applicationResponseSchema } },
+    },
+    controller.acceptInvitation,
+  );
+
+  app.put<{ Params: InvitationIdParams }>(
+    '/invitations/:id/decline',
+    {
+      preHandler: [app.authenticate, requireHiringApply],
+      schema: { params: idParamSchema, response: { 200: invitationResponseSchema } },
+    },
+    controller.declineInvitation,
+  );
+
+  // Read-only self data — no special permission beyond being authenticated. Branches on the
+  // caller's own accountType (loaded server-side, never client-supplied) inside the service.
+  app.get(
+    '/mine/stats',
+    {
+      preHandler: app.authenticate,
+      schema: { response: { 200: hiringStatsResponseSchema } },
+    },
+    controller.getMyStats,
   );
 }
