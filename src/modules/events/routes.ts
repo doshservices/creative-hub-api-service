@@ -29,7 +29,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/',
     {
       preHandler: [app.authenticate, requireEventsWrite],
-      schema: { body: createEventBodySchema, response: { 201: eventResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: 'Create an event',
+        body: createEventBodySchema,
+        response: { 201: eventResponseSchema },
+      },
     },
     controller.create,
   );
@@ -38,7 +43,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/',
     {
       preHandler: app.authenticate,
-      schema: { querystring: browseEventsQuerySchema, response: { 200: eventPageResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: 'Browse public events',
+        querystring: browseEventsQuerySchema,
+        response: { 200: eventPageResponseSchema },
+      },
     },
     controller.browse,
   );
@@ -47,7 +57,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/mine',
     {
       preHandler: [app.authenticate, requireEventsWrite],
-      schema: { querystring: listQuerySchema, response: { 200: eventPageResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: "List the caller's own organized events",
+        querystring: listQuerySchema,
+        response: { 200: eventPageResponseSchema },
+      },
     },
     controller.listMine,
   );
@@ -56,7 +71,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: eventResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: 'Get an event by id',
+        params: idParamSchema,
+        response: { 200: eventResponseSchema },
+      },
     },
     controller.getById,
   );
@@ -65,7 +85,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/:id/rsvp',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 201: eventResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: 'RSVP to an event',
+        params: idParamSchema,
+        response: { 201: eventResponseSchema },
+      },
     },
     controller.rsvp,
   );
@@ -74,7 +99,12 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
     '/:id/rsvp',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: eventResponseSchema } },
+      schema: {
+        tags: ['Events'],
+        summary: 'Cancel an RSVP',
+        params: idParamSchema,
+        response: { 200: eventResponseSchema },
+      },
     },
     controller.cancelRsvp,
   );

@@ -19,7 +19,12 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
     '/talents',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { querystring: listQuerySchema, response: { 200: talentPageResponseSchema } },
+      schema: {
+        tags: ['Admin'],
+        summary: 'List creative accounts with profile, KYC status, and wallet balance joined in',
+        querystring: listQuerySchema,
+        response: { 200: talentPageResponseSchema },
+      },
     },
     controller.listTalents,
   );
@@ -28,7 +33,12 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
     '/employers',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { querystring: listQuerySchema, response: { 200: employerPageResponseSchema } },
+      schema: {
+        tags: ['Admin'],
+        summary: 'List client accounts with company profile and wallet balance joined in',
+        querystring: listQuerySchema,
+        response: { 200: employerPageResponseSchema },
+      },
     },
     controller.listEmployers,
   );
@@ -37,7 +47,13 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
     '/stats',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { querystring: statsQuerySchema, response: { 200: statsResponseSchema } },
+      schema: {
+        tags: ['Admin'],
+        summary:
+          'Platform-wide dashboard stats: totals, listings by category, signups by day, ledger volume by type',
+        querystring: statsQuerySchema,
+        response: { 200: statsResponseSchema },
+      },
     },
     controller.stats,
   );

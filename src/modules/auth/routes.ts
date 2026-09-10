@@ -35,13 +35,31 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
 
   app.post(
     '/register',
-    { schema: { body: registerBodySchema, response: { 201: authTokensResponseSchema } } },
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Register a new account',
+        security: [],
+        body: registerBodySchema,
+        response: { 201: authTokensResponseSchema },
+      },
+    },
     controller.register,
   );
 
   app.post(
     '/login',
-    { schema: { body: loginBodySchema, response: { 200: loginResponseSchema } } },
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Log in with email and password',
+        description:
+          "Returns access/refresh tokens directly, or `{ requiresTwoFactor: true, twoFactorToken }` if the account has 2FA enabled — complete the login with POST /auth/login/verify-2fa in that case.",
+        security: [],
+        body: loginBodySchema,
+        response: { 200: loginResponseSchema },
+      },
+    },
     controller.login,
   );
 
@@ -49,6 +67,10 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
     '/login/verify-2fa',
     {
       schema: {
+        tags: ['Auth'],
+        summary: 'Complete login with a two-factor code',
+        description: 'Accepts either a 6-digit authenticator code or a one-time backup code.',
+        security: [],
         body: verifyTwoFactorLoginBodySchema,
         response: { 200: authTokensResponseSchema },
       },
@@ -58,27 +80,69 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
 
   app.post(
     '/refresh',
-    { schema: { body: refreshBodySchema, response: { 200: authTokensResponseSchema } } },
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Exchange a refresh token for a new access/refresh pair',
+        security: [],
+        body: refreshBodySchema,
+        response: { 200: authTokensResponseSchema },
+      },
+    },
     controller.refresh,
   );
 
-  app.post('/logout', { schema: { body: refreshBodySchema } }, controller.logout);
+  app.post(
+    '/logout',
+    {
+      schema: {
+        tags: ['Auth'],
+        summary: 'Invalidate a refresh token',
+        security: [],
+        body: refreshBodySchema,
+      },
+    },
+    controller.logout,
+  );
 
   app.get(
     '/me',
-    { preHandler: app.authenticate, schema: { response: { 200: accountResponseSchema } } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Get the authenticated account',
+        response: { 200: accountResponseSchema },
+      },
+    },
     controller.me,
   );
 
   app.put<{ Body: ChangePasswordBody }>(
     '/me/password',
-    { preHandler: app.authenticate, schema: { body: changePasswordBodySchema } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Auth'],
+        summary: "Change the authenticated account's password",
+        body: changePasswordBodySchema,
+      },
+    },
     controller.changePassword,
   );
 
   app.post(
     '/2fa/setup',
-    { preHandler: app.authenticate, schema: { response: { 200: setupTwoFactorResponseSchema } } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Start two-factor setup',
+        description:
+          'Generates a new TOTP secret and returns it plus an otpauth:// URL for a QR code. Not active until confirmed via POST /auth/2fa/enable.',
+        response: { 200: setupTwoFactorResponseSchema },
+      },
+    },
     controller.setupTwoFactor,
   );
 
@@ -86,14 +150,29 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
     '/2fa/enable',
     {
       preHandler: app.authenticate,
-      schema: { body: enableTwoFactorBodySchema, response: { 200: enableTwoFactorResponseSchema } },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Confirm a code and enable two-factor auth',
+        description:
+          'Returns 8 one-time backup codes — shown exactly once, store them now. Requires a prior POST /auth/2fa/setup.',
+        body: enableTwoFactorBodySchema,
+        response: { 200: enableTwoFactorResponseSchema },
+      },
     },
     controller.enableTwoFactor,
   );
 
   app.post<{ Body: DisableTwoFactorBody }>(
     '/2fa/disable',
-    { preHandler: app.authenticate, schema: { body: disableTwoFactorBodySchema } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Auth'],
+        summary: 'Disable two-factor auth',
+        description: 'Requires both the current password and a valid TOTP or backup code.',
+        body: disableTwoFactorBodySchema,
+      },
+    },
     controller.disableTwoFactor,
   );
 
@@ -101,7 +180,12 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
     '/admin/accounts/:id/suspend',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { params: accountIdParamSchema, response: { 200: accountResponseSchema } },
+      schema: {
+        tags: ['Auth', 'Admin'],
+        summary: 'Suspend an account',
+        params: accountIdParamSchema,
+        response: { 200: accountResponseSchema },
+      },
     },
     controller.suspendAccount,
   );
@@ -110,7 +194,12 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
     '/admin/accounts/:id/reactivate',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { params: accountIdParamSchema, response: { 200: accountResponseSchema } },
+      schema: {
+        tags: ['Auth', 'Admin'],
+        summary: 'Reactivate a suspended account',
+        params: accountIdParamSchema,
+        response: { 200: accountResponseSchema },
+      },
     },
     controller.reactivateAccount,
   );

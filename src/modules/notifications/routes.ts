@@ -8,7 +8,14 @@ export function registerNotificationsRoutes(
 ): void {
   app.get(
     '/preferences',
-    { preHandler: app.authenticate, schema: { response: { 200: preferencesResponseSchema } } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Notifications'],
+        summary: "Get the caller's notification preferences",
+        response: { 200: preferencesResponseSchema },
+      },
+    },
     controller.getMyPreferences,
   );
 
@@ -16,7 +23,12 @@ export function registerNotificationsRoutes(
     '/preferences',
     {
       preHandler: app.authenticate,
-      schema: { body: updatePreferencesBodySchema, response: { 200: preferencesResponseSchema } },
+      schema: {
+        tags: ['Notifications'],
+        summary: "Update the caller's notification preferences",
+        body: updatePreferencesBodySchema,
+        response: { 200: preferencesResponseSchema },
+      },
     },
     controller.updateMyPreferences,
   );

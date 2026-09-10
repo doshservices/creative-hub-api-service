@@ -54,7 +54,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/applications',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { body: applyBodySchema, response: { 201: applicationResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: 'Apply to a listing',
+        body: applyBodySchema,
+        response: { 201: applicationResponseSchema },
+      },
     },
     controller.apply,
   );
@@ -63,7 +68,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/applications/mine',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { querystring: listQuerySchema, response: { 200: applicationPageResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: "List the caller's own applications",
+        querystring: listQuerySchema,
+        response: { 200: applicationPageResponseSchema },
+      },
     },
     controller.listMyApplications,
   );
@@ -73,6 +83,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     {
       preHandler: [app.authenticate, requireListingsWrite],
       schema: {
+        tags: ['Hiring'],
+        summary: 'List applications for a listing (owner only)',
         params: listingIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: applicationPageResponseSchema },
@@ -86,6 +98,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     {
       preHandler: [app.authenticate, requireListingsWrite],
       schema: {
+        tags: ['Hiring'],
+        summary: "Update an application's status (owner only)",
         params: applicationIdParamSchema,
         body: updateApplicationStatusBodySchema,
         response: { 200: applicationResponseSchema },
@@ -101,7 +115,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/applications/:id/withdraw',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { params: applicationIdParamSchema, response: { 200: applicationResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: 'Withdraw an application',
+        params: applicationIdParamSchema,
+        response: { 200: applicationResponseSchema },
+      },
     },
     controller.withdrawApplication,
   );
@@ -110,7 +129,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/contracts/mine',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: contractPageResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: "List the caller's own contracts",
+        querystring: listQuerySchema,
+        response: { 200: contractPageResponseSchema },
+      },
     },
     controller.listMyContracts,
   );
@@ -121,7 +145,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/contracts/:id/complete',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: contractResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: 'Complete a contract and release escrow to the creative',
+        params: idParamSchema,
+        response: { 200: contractResponseSchema },
+      },
     },
     controller.completeContract,
   );
@@ -133,6 +162,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     {
       preHandler: [app.authenticate, requireListingsWrite],
       schema: {
+        tags: ['Hiring'],
+        summary: 'Invite a talent to a listing',
         params: listingIdParamSchema,
         body: inviteTalentBodySchema,
         response: { 201: invitationResponseSchema },
@@ -145,7 +176,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/invitations/mine',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { querystring: listQuerySchema, response: { 200: invitationPageResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: "List the caller's own invitations",
+        querystring: listQuerySchema,
+        response: { 200: invitationPageResponseSchema },
+      },
     },
     controller.listMyInvitations,
   );
@@ -156,7 +192,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/invitations/:id/accept',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { params: idParamSchema, response: { 200: applicationResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: 'Accept a talent invitation',
+        params: idParamSchema,
+        response: { 200: applicationResponseSchema },
+      },
     },
     controller.acceptInvitation,
   );
@@ -165,7 +206,12 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/invitations/:id/decline',
     {
       preHandler: [app.authenticate, requireHiringApply],
-      schema: { params: idParamSchema, response: { 200: invitationResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: 'Decline a talent invitation',
+        params: idParamSchema,
+        response: { 200: invitationResponseSchema },
+      },
     },
     controller.declineInvitation,
   );
@@ -176,7 +222,11 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
     '/mine/stats',
     {
       preHandler: app.authenticate,
-      schema: { response: { 200: hiringStatsResponseSchema } },
+      schema: {
+        tags: ['Hiring'],
+        summary: "Get the caller's hiring stats (shape differs by account type)",
+        response: { 200: hiringStatsResponseSchema },
+      },
     },
     controller.getMyStats,
   );

@@ -23,7 +23,13 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
     '/upload-url',
     {
       preHandler: [app.authenticate, requireFilesUpload],
-      schema: { body: createUploadUrlBodySchema, response: { 201: uploadUrlResponseSchema } },
+      schema: {
+        tags: ['Files'],
+        summary: 'Get a presigned S3 upload URL for a new file',
+        description: 'The object is not recorded until the upload is confirmed via POST /:id/confirm.',
+        body: createUploadUrlBodySchema,
+        response: { 201: uploadUrlResponseSchema },
+      },
     },
     controller.createUploadUrl,
   );
@@ -32,7 +38,12 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
     '/:id/confirm',
     {
       preHandler: [app.authenticate, requireFilesUpload],
-      schema: { params: fileIdParamSchema, response: { 200: fileResponseSchema } },
+      schema: {
+        tags: ['Files'],
+        summary: 'Confirm a completed upload',
+        params: fileIdParamSchema,
+        response: { 200: fileResponseSchema },
+      },
     },
     controller.confirmUpload,
   );
@@ -41,7 +52,12 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
     '/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: fileIdParamSchema, response: { 200: fileResponseSchema } },
+      schema: {
+        tags: ['Files'],
+        summary: "Get one of the caller's files by id",
+        params: fileIdParamSchema,
+        response: { 200: fileResponseSchema },
+      },
     },
     controller.getMyFile,
   );
@@ -50,7 +66,12 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
     '/',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: filePageResponseSchema } },
+      schema: {
+        tags: ['Files'],
+        summary: "List the caller's own files",
+        querystring: listQuerySchema,
+        response: { 200: filePageResponseSchema },
+      },
     },
     controller.listMyFiles,
   );
@@ -59,7 +80,12 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
     '/:id/download-url',
     {
       preHandler: app.authenticate,
-      schema: { params: fileIdParamSchema, response: { 200: downloadUrlResponseSchema } },
+      schema: {
+        tags: ['Files'],
+        summary: 'Get a presigned S3 download URL for a file',
+        params: fileIdParamSchema,
+        response: { 200: downloadUrlResponseSchema },
+      },
     },
     controller.createDownloadUrl,
   );

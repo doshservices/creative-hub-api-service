@@ -13,7 +13,12 @@ export function registerAuditRoutes(app: FastifyInstance, controller: AuditContr
     '/audit',
     {
       preHandler: [app.authenticate, requireAuditRead],
-      schema: { querystring: adminAuditQuerySchema, response: { 200: auditEntryPageResponseSchema } },
+      schema: {
+        tags: ['Audit', 'Admin'],
+        summary: 'List audit log entries, filterable by action/actor/date range',
+        querystring: adminAuditQuerySchema,
+        response: { 200: auditEntryPageResponseSchema },
+      },
     },
     controller.listAudit,
   );

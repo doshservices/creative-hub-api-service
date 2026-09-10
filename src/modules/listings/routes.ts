@@ -33,7 +33,13 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/',
     {
       preHandler: [app.authenticate, requireListingsWrite],
-      schema: { body: createListingBodySchema, response: { 201: listingResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: 'Create a job listing',
+        description: 'Pass `publish: false` to save it as a draft instead of publishing it live.',
+        body: createListingBodySchema,
+        response: { 201: listingResponseSchema },
+      },
     },
     controller.create,
   );
@@ -42,7 +48,13 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: listingPageResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: 'Browse open listings',
+        description: 'Public search/filter over published listings.',
+        querystring: listQuerySchema,
+        response: { 200: listingPageResponseSchema },
+      },
     },
     controller.listPublic,
   );
@@ -51,7 +63,12 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/mine',
     {
       preHandler: [app.authenticate, requireListingsWrite],
-      schema: { querystring: listQuerySchema, response: { 200: listingPageResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: "List the caller's own listings",
+        querystring: listQuerySchema,
+        response: { 200: listingPageResponseSchema },
+      },
     },
     controller.listMine,
   );
@@ -62,7 +79,11 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/mine/stats',
     {
       preHandler: [app.authenticate, requireListingsWrite],
-      schema: { response: { 200: listingStatsResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: "Get the caller's own listing stats",
+        response: { 200: listingStatsResponseSchema },
+      },
     },
     controller.myStats,
   );
@@ -71,7 +92,12 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: listingResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: 'Get a listing by id',
+        params: idParamSchema,
+        response: { 200: listingResponseSchema },
+      },
     },
     controller.getById,
   );
@@ -81,6 +107,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     {
       preHandler: [app.authenticate, requireListingsWrite],
       schema: {
+        tags: ['Listings'],
+        summary: 'Update a listing (owner only)',
         params: idParamSchema,
         body: updateListingBodySchema,
         response: { 200: listingResponseSchema },
@@ -93,7 +121,12 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/:id/close',
     {
       preHandler: [app.authenticate, requireListingsWrite],
-      schema: { params: idParamSchema, response: { 200: listingResponseSchema } },
+      schema: {
+        tags: ['Listings'],
+        summary: 'Close a listing (owner only)',
+        params: idParamSchema,
+        response: { 200: listingResponseSchema },
+      },
     },
     controller.close,
   );
@@ -108,6 +141,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     {
       preHandler: [app.authenticate, requireListingsModerate],
       schema: {
+        tags: ['Listings', 'Admin'],
+        summary: 'Flag a listing',
         params: idParamSchema,
         body: flagListingBodySchema,
         response: { 200: listingResponseSchema },
@@ -120,7 +155,12 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/admin/:id/unflag',
     {
       preHandler: [app.authenticate, requireListingsModerate],
-      schema: { params: idParamSchema, response: { 200: listingResponseSchema } },
+      schema: {
+        tags: ['Listings', 'Admin'],
+        summary: 'Unflag a listing',
+        params: idParamSchema,
+        response: { 200: listingResponseSchema },
+      },
     },
     controller.unflag,
   );
@@ -129,7 +169,12 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
     '/admin/:id/close',
     {
       preHandler: [app.authenticate, requireListingsModerate],
-      schema: { params: idParamSchema, response: { 200: listingResponseSchema } },
+      schema: {
+        tags: ['Listings', 'Admin'],
+        summary: 'Close a listing (admin override)',
+        params: idParamSchema,
+        response: { 200: listingResponseSchema },
+      },
     },
     controller.adminClose,
   );

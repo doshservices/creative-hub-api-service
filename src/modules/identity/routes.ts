@@ -31,6 +31,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
     {
       preHandler: [app.authenticate, requireIdentityVerify],
       schema: {
+        tags: ['Identity (KYC)'],
+        summary: 'Submit a KYC verification',
         body: submitVerificationBodySchema,
         response: { 201: verificationResponseSchema },
       },
@@ -40,7 +42,14 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
 
   app.get(
     '/verifications/me',
-    { preHandler: app.authenticate, schema: { response: { 200: verificationResponseSchema } } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Identity (KYC)'],
+        summary: "Get the caller's KYC status",
+        response: { 200: verificationResponseSchema },
+      },
+    },
     controller.getMyVerification,
   );
 
@@ -50,6 +59,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
     {
       preHandler: [app.authenticate, requireIdentityReview],
       schema: {
+        tags: ['Identity (KYC)', 'Admin'],
+        summary: 'List KYC verifications, optionally filtered by status',
         querystring: listVerificationsQuerySchema,
         response: { 200: verificationPageResponseSchema },
       },
@@ -61,7 +72,12 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
     '/admin/verifications/:id/approve',
     {
       preHandler: [app.authenticate, requireIdentityReview],
-      schema: { params: verificationIdParamSchema, response: { 200: verificationResponseSchema } },
+      schema: {
+        tags: ['Identity (KYC)', 'Admin'],
+        summary: 'Approve a KYC verification',
+        params: verificationIdParamSchema,
+        response: { 200: verificationResponseSchema },
+      },
     },
     controller.approveVerification,
   );
@@ -71,6 +87,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
     {
       preHandler: [app.authenticate, requireIdentityReview],
       schema: {
+        tags: ['Identity (KYC)', 'Admin'],
+        summary: 'Reject a KYC verification',
         params: verificationIdParamSchema,
         body: rejectVerificationBodySchema,
         response: { 200: verificationResponseSchema },

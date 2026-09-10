@@ -38,7 +38,14 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
 
   app.get(
     '/me/creative-profile',
-    { preHandler: app.authenticate, schema: { response: { 200: creativeProfileResponseSchema } } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Users'],
+        summary: "Get the authenticated creative's profile",
+        response: { 200: creativeProfileResponseSchema },
+      },
+    },
     controller.getMyCreativeProfile,
   );
 
@@ -47,6 +54,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: [app.authenticate, requireCreativeProfileWrite],
       schema: {
+        tags: ['Users'],
+        summary: "Create or update the authenticated creative's profile",
         body: upsertCreativeProfileBodySchema,
         response: { 200: creativeProfileResponseSchema },
       },
@@ -58,7 +67,12 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     '/me/creative-profile/upload-url',
     {
       preHandler: [app.authenticate, requireCreativeProfileWrite],
-      schema: { body: createUploadUrlBodySchema, response: { 201: uploadUrlResponseSchema } },
+      schema: {
+        tags: ['Users'],
+        summary: 'Get a presigned S3 upload URL for a profile asset',
+        body: createUploadUrlBodySchema,
+        response: { 201: uploadUrlResponseSchema },
+      },
     },
     controller.createUploadUrl,
   );
@@ -72,6 +86,9 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: [app.authenticate, requireCreativeProfileWrite],
       schema: {
+        tags: ['Users'],
+        summary: 'Add a portfolio item',
+        description: 'The file must already be uploaded and confirmed via the Files API.',
         body: createPortfolioItemBodySchema,
         response: { 201: portfolioItemResponseSchema },
       },
@@ -84,6 +101,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Users'],
+        summary: "List the authenticated creative's portfolio items",
         querystring: pageQuerySchema,
         response: { 200: portfolioItemPageResponseSchema },
       },
@@ -96,6 +115,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: [app.authenticate, requireCreativeProfileWrite],
       schema: {
+        tags: ['Users'],
+        summary: 'Delete a portfolio item',
         params: portfolioItemIdParamsSchema,
         response: { 200: deletePortfolioItemResponseSchema },
       },
@@ -111,7 +132,11 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     '/me/employer-profile',
     {
       preHandler: [app.authenticate, requireEmployerProfileWrite],
-      schema: { response: { 200: employerProfileResponseSchema } },
+      schema: {
+        tags: ['Users'],
+        summary: "Get the authenticated employer's company profile",
+        response: { 200: employerProfileResponseSchema },
+      },
     },
     controller.getMyEmployerProfile,
   );
@@ -121,6 +146,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: [app.authenticate, requireEmployerProfileWrite],
       schema: {
+        tags: ['Users'],
+        summary: "Create or update the authenticated employer's company profile",
         body: upsertEmployerProfileBodySchema,
         response: { 200: employerProfileResponseSchema },
       },
@@ -137,6 +164,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Users'],
+        summary: 'Search public talent profiles',
         querystring: talentSearchQuerySchema,
         response: { 200: publicTalentPageResponseSchema },
       },
@@ -149,6 +178,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Users'],
+        summary: "Get a talent's public profile",
         params: accountIdParamsSchema,
         response: { 200: publicTalentResponseSchema },
       },
@@ -161,6 +192,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Users'],
+        summary: "List a talent's public portfolio items",
         params: accountIdParamsSchema,
         querystring: pageQuerySchema,
         response: { 200: portfolioItemPageResponseSchema },

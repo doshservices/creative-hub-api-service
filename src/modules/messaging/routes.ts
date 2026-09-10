@@ -29,7 +29,12 @@ export function registerMessagingRoutes(
     '/messages',
     {
       preHandler: app.authenticate,
-      schema: { body: sendMessageBodySchema, response: { 201: messageResponseSchema } },
+      schema: {
+        tags: ['Messaging'],
+        summary: 'Send a message, creating the conversation if needed',
+        body: sendMessageBodySchema,
+        response: { 201: messageResponseSchema },
+      },
     },
     controller.sendMessage,
   );
@@ -39,6 +44,8 @@ export function registerMessagingRoutes(
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Messaging'],
+        summary: "List the caller's conversations",
         querystring: conversationListQuerySchema,
         response: { 200: conversationPageResponseSchema },
       },
@@ -51,6 +58,8 @@ export function registerMessagingRoutes(
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Messaging'],
+        summary: "List a conversation's messages",
         params: conversationIdParamSchema,
         querystring: messageListQuerySchema,
         response: { 200: messagePageResponseSchema },
@@ -61,7 +70,14 @@ export function registerMessagingRoutes(
 
   app.post<{ Params: ConversationIdParams }>(
     '/conversations/:id/read',
-    { preHandler: app.authenticate, schema: { params: conversationIdParamSchema } },
+    {
+      preHandler: app.authenticate,
+      schema: {
+        tags: ['Messaging'],
+        summary: 'Mark a conversation as read',
+        params: conversationIdParamSchema,
+      },
+    },
     controller.markRead,
   );
 }

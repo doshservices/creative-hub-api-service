@@ -31,7 +31,11 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     '/permissions',
     {
       preHandler: [app.authenticate, requireRbacManage],
-      schema: { response: { 200: permissionsCatalogResponseSchema } },
+      schema: {
+        tags: ['RBAC'],
+        summary: 'List the full catalog of permissions',
+        response: { 200: permissionsCatalogResponseSchema },
+      },
     },
     controller.listPermissionsCatalog,
   );
@@ -40,7 +44,12 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     '/roles',
     {
       preHandler: [app.authenticate, requireRbacManage],
-      schema: { body: createRoleBodySchema, response: { 201: roleResponseSchema } },
+      schema: {
+        tags: ['RBAC'],
+        summary: 'Create a role',
+        body: createRoleBodySchema,
+        response: { 201: roleResponseSchema },
+      },
     },
     controller.createRole,
   );
@@ -49,7 +58,12 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     '/roles',
     {
       preHandler: [app.authenticate, requireRbacManage],
-      schema: { querystring: listQuerySchema, response: { 200: rolePageResponseSchema } },
+      schema: {
+        tags: ['RBAC'],
+        summary: 'List roles',
+        querystring: listQuerySchema,
+        response: { 200: rolePageResponseSchema },
+      },
     },
     controller.listRoles,
   );
@@ -58,7 +72,12 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     '/roles/:id',
     {
       preHandler: [app.authenticate, requireRbacManage],
-      schema: { params: roleIdParamSchema, response: { 200: roleResponseSchema } },
+      schema: {
+        tags: ['RBAC'],
+        summary: 'Get a role by id',
+        params: roleIdParamSchema,
+        response: { 200: roleResponseSchema },
+      },
     },
     controller.getRole,
   );
@@ -68,6 +87,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     {
       preHandler: [app.authenticate, requireRbacManage],
       schema: {
+        tags: ['RBAC'],
+        summary: "Replace a role's permission set",
         params: roleIdParamSchema,
         body: updateRolePermissionsBodySchema,
         response: { 200: roleResponseSchema },
@@ -81,6 +102,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
     {
       preHandler: [app.authenticate, requireRbacManage],
       schema: {
+        tags: ['RBAC'],
+        summary: 'Assign a role to an account',
         params: accountIdParamSchema,
         body: assignRoleBodySchema,
         response: { 200: roleAssignmentResponseSchema },

@@ -22,6 +22,8 @@ export function registerReviewsRoutes(app: FastifyInstance, controller: ReviewsC
     {
       preHandler: [app.authenticate, requireReviewsSubmit],
       schema: {
+        tags: ['Reviews'],
+        summary: 'Submit a review on a completed contract',
         params: contractIdParamSchema,
         body: submitReviewBodySchema,
         response: { 201: reviewResponseSchema },
@@ -37,6 +39,8 @@ export function registerReviewsRoutes(app: FastifyInstance, controller: ReviewsC
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Reviews'],
+        summary: "List a talent's received reviews",
         params: accountIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: reviewPageResponseSchema },

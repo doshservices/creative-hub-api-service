@@ -24,7 +24,12 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
     '/me',
     {
       preHandler: app.authenticate,
-      schema: { querystring: walletQuerySchema, response: { 200: walletResponseSchema } },
+      schema: {
+        tags: ['Wallet'],
+        summary: "Get the caller's wallet balance",
+        querystring: walletQuerySchema,
+        response: { 200: walletResponseSchema },
+      },
     },
     controller.getMyWallet,
   );
@@ -33,7 +38,12 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
     '/me/ledger',
     {
       preHandler: app.authenticate,
-      schema: { querystring: ledgerQuerySchema, response: { 200: ledgerPageResponseSchema } },
+      schema: {
+        tags: ['Wallet'],
+        summary: "List the caller's ledger entries",
+        querystring: ledgerQuerySchema,
+        response: { 200: ledgerPageResponseSchema },
+      },
     },
     controller.listMyLedger,
   );
@@ -42,7 +52,12 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
     '/me/summary',
     {
       preHandler: app.authenticate,
-      schema: { querystring: summaryQuerySchema, response: { 200: walletSummaryResponseSchema } },
+      schema: {
+        tags: ['Wallet'],
+        summary: "Get the caller's available/held/total-earned summary",
+        querystring: summaryQuerySchema,
+        response: { 200: walletSummaryResponseSchema },
+      },
     },
     controller.getMySummary,
   );
@@ -52,7 +67,12 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
     '/admin/ledger',
     {
       preHandler: [app.authenticate, requireWalletAdmin],
-      schema: { querystring: adminLedgerQuerySchema, response: { 200: ledgerPageResponseSchema } },
+      schema: {
+        tags: ['Wallet', 'Admin'],
+        summary: 'List ledger entries across every account',
+        querystring: adminLedgerQuerySchema,
+        response: { 200: ledgerPageResponseSchema },
+      },
     },
     controller.listAdminLedger,
   );

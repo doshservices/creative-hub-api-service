@@ -38,7 +38,12 @@ export function registerPaymentsRoutes(
     '/deposits',
     {
       preHandler: [app.authenticate, requirePaymentsInitiate],
-      schema: { body: initiateDepositBodySchema, response: { 201: depositResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: 'Initiate a deposit',
+        body: initiateDepositBodySchema,
+        response: { 201: depositResponseSchema },
+      },
     },
     controller.initiateDeposit,
   );
@@ -47,7 +52,12 @@ export function registerPaymentsRoutes(
     '/deposits/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: depositResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: 'Get a deposit by id',
+        params: idParamSchema,
+        response: { 200: depositResponseSchema },
+      },
     },
     controller.getMyDeposit,
   );
@@ -56,7 +66,12 @@ export function registerPaymentsRoutes(
     '/deposits',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: depositPageResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: "List the caller's own deposits",
+        querystring: listQuerySchema,
+        response: { 200: depositPageResponseSchema },
+      },
     },
     controller.listMyDeposits,
   );
@@ -65,7 +80,12 @@ export function registerPaymentsRoutes(
     '/withdrawals',
     {
       preHandler: [app.authenticate, requirePaymentsInitiate],
-      schema: { body: initiateWithdrawalBodySchema, response: { 201: withdrawalResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: 'Initiate a withdrawal',
+        body: initiateWithdrawalBodySchema,
+        response: { 201: withdrawalResponseSchema },
+      },
     },
     controller.initiateWithdrawal,
   );
@@ -74,7 +94,12 @@ export function registerPaymentsRoutes(
     '/withdrawals/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: idParamSchema, response: { 200: withdrawalResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: 'Get a withdrawal by id',
+        params: idParamSchema,
+        response: { 200: withdrawalResponseSchema },
+      },
     },
     controller.getMyWithdrawal,
   );
@@ -83,7 +108,12 @@ export function registerPaymentsRoutes(
     '/withdrawals',
     {
       preHandler: app.authenticate,
-      schema: { querystring: listQuerySchema, response: { 200: withdrawalPageResponseSchema } },
+      schema: {
+        tags: ['Payments'],
+        summary: "List the caller's own withdrawals",
+        querystring: listQuerySchema,
+        response: { 200: withdrawalPageResponseSchema },
+      },
     },
     controller.listMyWithdrawals,
   );
@@ -93,7 +123,12 @@ export function registerPaymentsRoutes(
     '/admin/deposits',
     {
       preHandler: [app.authenticate, requirePaymentsAdmin],
-      schema: { querystring: adminDepositQuerySchema, response: { 200: depositPageResponseSchema } },
+      schema: {
+        tags: ['Payments', 'Admin'],
+        summary: 'List deposits across every account',
+        querystring: adminDepositQuerySchema,
+        response: { 200: depositPageResponseSchema },
+      },
     },
     controller.listAdminDeposits,
   );
@@ -103,6 +138,8 @@ export function registerPaymentsRoutes(
     {
       preHandler: [app.authenticate, requirePaymentsAdmin],
       schema: {
+        tags: ['Payments', 'Admin'],
+        summary: 'List withdrawals across every account',
         querystring: adminWithdrawalQuerySchema,
         response: { 200: withdrawalPageResponseSchema },
       },
@@ -114,7 +151,12 @@ export function registerPaymentsRoutes(
     '/admin/withdrawals/:id/reverse',
     {
       preHandler: [app.authenticate, requirePaymentsAdmin],
-      schema: { params: idParamSchema, response: { 200: withdrawalResponseSchema } },
+      schema: {
+        tags: ['Payments', 'Admin'],
+        summary: 'Reverse a completed withdrawal (refund)',
+        params: idParamSchema,
+        response: { 200: withdrawalResponseSchema },
+      },
     },
     controller.reverseWithdrawal,
   );
@@ -130,7 +172,14 @@ export function registerPaymentsRoutes(
           throw new ForbiddenError('Invalid webhook signature');
         }
       },
-      schema: { body: flutterwaveWebhookBodySchema },
+      schema: {
+        tags: ['Payments'],
+        summary: 'Flutterwave payment/transfer webhook',
+        description:
+          "Called by Flutterwave itself, not a client — authenticated via the `verif-hash` signature header rather than a bearer token.",
+        security: [],
+        body: flutterwaveWebhookBodySchema,
+      },
     },
     controller.handleWebhook,
   );

@@ -30,6 +30,8 @@ export function registerCollaborationRoutes(
     {
       preHandler: [app.authenticate, requireCollaborationSubmit],
       schema: {
+        tags: ['Collaboration'],
+        summary: 'Submit a deliverable on a contract',
         params: contractIdParamSchema,
         body: submitDeliverableBodySchema,
         response: { 201: deliverableResponseSchema },
@@ -43,6 +45,8 @@ export function registerCollaborationRoutes(
     {
       preHandler: app.authenticate,
       schema: {
+        tags: ['Collaboration'],
+        summary: 'List deliverables submitted on a contract',
         params: contractIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: deliverablePageResponseSchema },
@@ -55,7 +59,12 @@ export function registerCollaborationRoutes(
     '/deliverables/:id',
     {
       preHandler: app.authenticate,
-      schema: { params: deliverableIdParamSchema, response: { 200: deliverableResponseSchema } },
+      schema: {
+        tags: ['Collaboration'],
+        summary: 'Get a deliverable by id',
+        params: deliverableIdParamSchema,
+        response: { 200: deliverableResponseSchema },
+      },
     },
     controller.getDeliverable,
   );
@@ -65,6 +74,8 @@ export function registerCollaborationRoutes(
     {
       preHandler: [app.authenticate, requireCollaborationReview],
       schema: {
+        tags: ['Collaboration'],
+        summary: 'Review a submitted deliverable (approve or request changes)',
         params: deliverableIdParamSchema,
         body: reviewDeliverableBodySchema,
         response: { 200: deliverableResponseSchema },
