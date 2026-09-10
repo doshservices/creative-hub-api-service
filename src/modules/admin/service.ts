@@ -5,6 +5,7 @@ import type {
   AdminEmployerRowDTO,
   AdminKycStatus,
   AdminRowPage,
+  AdminSignupsByDayDTO,
   AdminStatsDTO,
   AdminTalentRowDTO,
   AdminWalletBalanceDTO,
@@ -37,9 +38,63 @@ export interface ListingStatsReaderPort {
   getPlatformListingStats(): Promise<{ activeCount: number; byCategory: Record<string, number> }>;
 }
 
+// One call per accountType — mirrors how AccountReaderPort.count is already called once per
+// accountType in getStats below, rather than a single unfiltered call the service would then
+// have to split by type itself (the underlying aggregation has no cheaper way to return a
+// per-type breakdown for a single day bucket).
+export interface SignupsReaderPort {
+  getSignupsByDay(params: {
+    from: Date;
+    to: Date;
+    accountType: AccountType;
+  }): Promise<Array<{ date: string; count: number }>>;
+}
+
+export interface LedgerVolumeReaderPort {
+  getLedgerVolumeByType(params: { from: Date; to: Date }): Promise<Record<string, number>>;
+}
+
 export interface PageParams {
   limit: number;
   cursor?: string;
+}
+
+export interface StatsParams {
+  days: number;
+}
+
+export const DEFAULT_STATS_DAYS = 30;
+export const MAX_STATS_DAYS = 90;
+
+// Full UTC calendar days ending today (inclusive) — `days: 1` means "just today", `days: 30`
+// (the default) means today plus the 29 days before it. Matches the day-bucket format
+// ($dateToString '%Y-%m-%d') the auth/wallet aggregations group by.
+function statsDateRange(days: number): { from: Date; to: Date } {
+  const now = new Date();
+  const to = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
+  );
+  const from = new Date(to.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  from.setUTCHours(0, 0, 0, 0);
+  return { from, to };
+}
+
+// Merges the two per-accountType day-bucket arrays into one row per date — a date present in
+// only one of the two (e.g. a day with talent signups but no employer signups) still gets a row,
+// with the missing side at 0, never a dropped date.
+function mergeSignupsByDay(
+  talentRows: Array<{ date: string; count: number }>,
+  employerRows: Array<{ date: string; count: number }>,
+): AdminSignupsByDayDTO[] {
+  const byDate = new Map<string, AdminSignupsByDayDTO>();
+  for (const row of talentRows) {
+    byDate.set(row.date, { date: row.date, talents: row.count, employers: 0 });
+  }
+  for (const row of employerRows) {
+    const existing = byDate.get(row.date);
+    byDate.set(row.date, { date: row.date, talents: existing?.talents ?? 0, employers: row.count });
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Composes one page of accounts (the primary, driving query) with three batch lookups run in
@@ -74,6 +129,8 @@ export class AdminService {
     private readonly kyc: KycStatusReaderPort,
     private readonly wallets: WalletBalanceReaderPort,
     private readonly listingStats: ListingStatsReaderPort,
+    private readonly signups: SignupsReaderPort,
+    private readonly ledgerVolume: LedgerVolumeReaderPort,
   ) {}
 
   // Deliberately `auth.list`, not a `users` profile list, as the driving query: an account that
@@ -110,20 +167,29 @@ export class AdminService {
     return { items, nextCursor: page.nextCursor };
   }
 
-  // Scoped to figures each sourced from one cheap, already-existing owning-module read — see the
-  // module's report for what was deliberately left out (signups-over-time, transaction volume)
-  // and why.
-  async getStats(): Promise<AdminStatsDTO> {
-    const [totalTalents, totalEmployers, listingStats] = await Promise.all([
-      this.accounts.count('creative'),
-      this.accounts.count('client'),
-      this.listingStats.getPlatformListingStats(),
-    ]);
+  // Each figure sourced from one cheap, already-existing (or newly added) owning-module read,
+  // bounded to a fixed number of queries regardless of the day range — never a per-day loop.
+  // `signupsByDay`/`ledgerVolumeByType` are windowed to the last `params.days` UTC calendar days
+  // (inclusive of today); the non-timeseries figures (`totalTalents`, etc.) stay all-time, same
+  // as before this method took a params argument.
+  async getStats(params: StatsParams = { days: DEFAULT_STATS_DAYS }): Promise<AdminStatsDTO> {
+    const { from, to } = statsDateRange(params.days);
+    const [totalTalents, totalEmployers, listingStats, talentSignups, employerSignups, ledgerVolumeByType] =
+      await Promise.all([
+        this.accounts.count('creative'),
+        this.accounts.count('client'),
+        this.listingStats.getPlatformListingStats(),
+        this.signups.getSignupsByDay({ from, to, accountType: 'creative' }),
+        this.signups.getSignupsByDay({ from, to, accountType: 'client' }),
+        this.ledgerVolume.getLedgerVolumeByType({ from, to }),
+      ]);
     return {
       totalTalents,
       totalEmployers,
       activeListings: listingStats.activeCount,
       listingsByCategory: listingStats.byCategory,
+      signupsByDay: mergeSignupsByDay(talentSignups, employerSignups),
+      ledgerVolumeByType,
     };
   }
 }

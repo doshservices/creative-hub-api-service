@@ -1,6 +1,6 @@
 import type { Collection, Db, Filter } from 'mongodb';
 import { ObjectId } from 'mongodb';
-import { accountIndexes, type AccountDocument, type AccountType } from './model.js';
+import { accountIndexes, type AccountDocument, type AccountType, type TwoFactorState } from './model.js';
 import type { AccountDTO, AccountPage } from './dto.js';
 
 export interface AccountWithCredentials extends AccountDTO {
@@ -14,8 +14,16 @@ const ACCOUNT_FIELDS = {
   accountType: 1,
   permissions: 1,
   status: 1,
+  twoFactor: 1,
   createdAt: 1,
 } as const;
+
+const DISABLED_TWO_FACTOR: TwoFactorState = {
+  enabled: false,
+  secret: null,
+  pendingSecret: null,
+  backupCodeHashes: [],
+};
 
 function toDTO(doc: AccountDocument): AccountDTO {
   return {
@@ -26,6 +34,7 @@ function toDTO(doc: AccountDocument): AccountDTO {
     accountType: doc.accountType,
     permissions: doc.permissions,
     status: doc.status,
+    twoFactorEnabled: doc.twoFactor.enabled,
     createdAt: doc.createdAt,
   };
 }
@@ -61,6 +70,7 @@ export class AccountRepository {
       accountType: input.accountType,
       permissions: input.permissions,
       status: 'active',
+      twoFactor: { ...DISABLED_TWO_FACTOR },
       createdAt: now,
       updatedAt: now,
     };
@@ -124,6 +134,59 @@ export class AccountRepository {
     return result ? toDTO(result) : null;
   }
 
+  // Narrow projection for the 2FA setup/login flows — never widen findById's projection just
+  // for this, same reasoning as findCredentialsById.
+  async findTwoFactorStateById(id: string): Promise<TwoFactorState | null> {
+    const doc = await this.collection.findOne(
+      { _id: new ObjectId(id) },
+      { projection: { twoFactor: 1 } },
+    );
+    return doc ? doc.twoFactor : null;
+  }
+
+  // POST /auth/2fa/setup — the secret isn't active until enableTwoFactor confirms a code
+  // against it, so it lands in `pendingSecret`, not `secret`.
+  async setPendingTwoFactorSecret(id: string, pendingSecret: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { 'twoFactor.pendingSecret': pendingSecret, updatedAt: new Date() } },
+    );
+  }
+
+  // POST /auth/2fa/enable — promotes the confirmed pending secret and stores the backup code
+  // hashes generated alongside it. The caller is responsible for the audit entry.
+  async activateTwoFactor(id: string, secret: string, backupCodeHashes: string[]): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      {
+        $set: {
+          'twoFactor.enabled': true,
+          'twoFactor.secret': secret,
+          'twoFactor.pendingSecret': null,
+          'twoFactor.backupCodeHashes': backupCodeHashes,
+          updatedAt: new Date(),
+        },
+      },
+    );
+  }
+
+  // POST /auth/2fa/disable — resets to the same disabled state a brand-new account starts in.
+  async deactivateTwoFactor(id: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { twoFactor: { ...DISABLED_TWO_FACTOR }, updatedAt: new Date() } },
+    );
+  }
+
+  // A backup code is single-use — $pull removes exactly the redeemed hash so it can never be
+  // replayed, without needing a read-modify-write race on the array.
+  async removeBackupCodeHash(id: string, hash: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $pull: { 'twoFactor.backupCodeHashes': hash }, $set: { updatedAt: new Date() } },
+    );
+  }
+
   // Batch lookup for the future admin composition module (Manage Talents/Employers) — a single
   // $in query, never one findById per row.
   async findManyByIds(ids: string[]): Promise<AccountDTO[]> {
@@ -138,6 +201,35 @@ export class AccountRepository {
   async count(accountType?: AccountType): Promise<number> {
     const filter: Filter<AccountDocument> = accountType ? { accountType } : {};
     return this.collection.countDocuments(filter);
+  }
+
+  // Signups-per-day for the admin composition module's timeseries stat — one $group-by-day
+  // aggregation over the requested range, never a loop of per-day countDocuments calls. Bucketed
+  // by UTC calendar day via $dateToString, matching how the rest of this codebase treats
+  // createdAt ranges (see wallet's ledger.repository.ts listAll).
+  async countByDayForRange(params: {
+    from: Date;
+    to: Date;
+    accountType?: AccountType;
+  }): Promise<Array<{ date: string; count: number }>> {
+    const match: Filter<AccountDocument> = {
+      createdAt: { $gte: params.from, $lte: params.to },
+      ...(params.accountType ? { accountType: params.accountType } : {}),
+    };
+    const pipeline = [
+      { $match: match },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'UTC' } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 as const } },
+    ];
+    const rows = await this.collection
+      .aggregate<{ _id: string; count: number }>(pipeline)
+      .toArray();
+    return rows.map((row) => ({ date: row._id, count: row.count }));
   }
 
   async list(params: {

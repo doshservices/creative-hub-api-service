@@ -49,6 +49,81 @@ export const authTokensResponseSchema = {
   },
 } as const;
 
+// Login returns EITHER full tokens OR a two-factor challenge — the property lists are just the
+// union of both shapes; only whichever the service actually returned gets serialized.
+export const loginResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        accessToken: { type: 'string' },
+        refreshToken: { type: 'string' },
+        expiresIn: { type: 'string' },
+        requiresTwoFactor: { type: 'boolean' },
+        twoFactorToken: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
+export const verifyTwoFactorLoginBodySchema = {
+  type: 'object',
+  required: ['twoFactorToken', 'code'],
+  additionalProperties: false,
+  properties: {
+    twoFactorToken: { type: 'string', minLength: 1 },
+    code: { type: 'string', minLength: 1, maxLength: 20 },
+  },
+} as const;
+
+export const setupTwoFactorResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        secret: { type: 'string' },
+        otpauthUrl: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
+export const enableTwoFactorBodySchema = {
+  type: 'object',
+  required: ['code'],
+  additionalProperties: false,
+  properties: {
+    code: { type: 'string', pattern: '^\\d{6}$' },
+  },
+} as const;
+
+export const enableTwoFactorResponseSchema = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    data: {
+      type: 'object',
+      properties: {
+        backupCodes: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  },
+} as const;
+
+export const disableTwoFactorBodySchema = {
+  type: 'object',
+  required: ['password', 'code'],
+  additionalProperties: false,
+  properties: {
+    password: { type: 'string', minLength: 8, maxLength: 128 },
+    code: { type: 'string', minLength: 1, maxLength: 20 },
+  },
+} as const;
+
 export const changePasswordBodySchema = {
   type: 'object',
   required: ['currentPassword', 'newPassword'],
@@ -73,6 +148,7 @@ export const accountResponseSchema = {
         accountType: { type: 'string', enum: ['client', 'creative'] },
         permissions: { type: 'array', items: { type: 'string' } },
         status: { type: 'string', enum: ['active', 'suspended'] },
+        twoFactorEnabled: { type: 'boolean' },
         createdAt: { type: 'string' },
       },
     },

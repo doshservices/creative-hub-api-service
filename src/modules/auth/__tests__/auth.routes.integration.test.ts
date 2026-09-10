@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../../../app.js';
 import { PERMISSIONS } from '../../../common/permissions.js';
 import type { AccountType } from '../model.js';
+import { generateTotp } from '../totp.js';
 
 function uniqueEmail(): string {
   return `test-${randomUUID()}@example.com`;
@@ -385,6 +386,200 @@ describe('auth routes', () => {
         .find({ targetId, action: { $in: ['auth.account_suspended', 'auth.account_reactivated'] } })
         .toArray();
       expect(auditEntries).toHaveLength(2);
+    });
+  });
+
+  describe('two-factor authentication', () => {
+    async function setUpTwoFactor(
+      accessToken: string,
+    ): Promise<{ secret: string; backupCodes: string[] }> {
+      const setupResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/setup',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      const { secret } = setupResponse.json().data;
+
+      const enableResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/enable',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { code: generateTotp(secret) },
+      });
+      return { secret, backupCodes: enableResponse.json().data.backupCodes };
+    }
+
+    it('rejects setup/enable/disable without authentication', async () => {
+      const setupResponse = await app.inject({ method: 'POST', url: '/auth/2fa/setup' });
+      const enableResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/enable',
+        payload: { code: '123456' },
+      });
+      const disableResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/disable',
+        payload: { password: 'password123', code: '123456' },
+      });
+      expect(setupResponse.statusCode).toBe(401);
+      expect(enableResponse.statusCode).toBe(401);
+      expect(disableResponse.statusCode).toBe(401);
+    });
+
+    it('rejects enabling with an invalid code', async () => {
+      const registerResponse = await register(app, uniqueEmail());
+      const { accessToken } = registerResponse.json().data;
+
+      await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/setup',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/enable',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { code: '000000' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('enables 2FA and returns 8 one-time backup codes, recording an audit entry', async () => {
+      const registerResponse = await register(app, uniqueEmail());
+      const { accessToken } = registerResponse.json().data;
+
+      const { backupCodes } = await setUpTwoFactor(accessToken);
+
+      expect(backupCodes).toHaveLength(8);
+      const meResponse = await app.inject({
+        method: 'GET',
+        url: '/auth/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(meResponse.json().data.twoFactorEnabled).toBe(true);
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'auth.2fa_enabled' })
+        .toArray();
+      expect(auditEntries).toHaveLength(1);
+    });
+
+    it('requires a two-factor code to complete login once enabled', async () => {
+      const email = uniqueEmail();
+      const registerResponse = await register(app, email);
+      const { accessToken } = registerResponse.json().data;
+      const { secret } = await setUpTwoFactor(accessToken);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'password123' },
+      });
+      expect(loginResponse.statusCode).toBe(200);
+      expect(loginResponse.json().data).toMatchObject({ requiresTwoFactor: true });
+      expect(loginResponse.json().data.accessToken).toBeUndefined();
+
+      const { twoFactorToken } = loginResponse.json().data;
+      const verifyResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login/verify-2fa',
+        payload: { twoFactorToken, code: generateTotp(secret) },
+      });
+      expect(verifyResponse.statusCode).toBe(200);
+      expect(verifyResponse.json().data.accessToken).toEqual(expect.any(String));
+    });
+
+    it('rejects reusing a two-factor challenge token after a successful verify', async () => {
+      const email = uniqueEmail();
+      const registerResponse = await register(app, email);
+      const { accessToken } = registerResponse.json().data;
+      const { secret } = await setUpTwoFactor(accessToken);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'password123' },
+      });
+      const { twoFactorToken } = loginResponse.json().data;
+      const code = generateTotp(secret);
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/auth/login/verify-2fa',
+        payload: { twoFactorToken, code },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: 'POST',
+        url: '/auth/login/verify-2fa',
+        payload: { twoFactorToken, code },
+      });
+      expect(second.statusCode).toBe(401);
+    });
+
+    it('accepts a backup code to complete login', async () => {
+      const email = uniqueEmail();
+      const registerResponse = await register(app, email);
+      const { accessToken } = registerResponse.json().data;
+      const { backupCodes } = await setUpTwoFactor(accessToken);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'password123' },
+      });
+      const { twoFactorToken } = loginResponse.json().data;
+
+      const verifyResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login/verify-2fa',
+        payload: { twoFactorToken, code: backupCodes[0] },
+      });
+      expect(verifyResponse.statusCode).toBe(200);
+    });
+
+    it('disables 2FA with the correct password and a valid code, recording an audit entry', async () => {
+      const registerResponse = await register(app, uniqueEmail());
+      const { accessToken } = registerResponse.json().data;
+      const { secret } = await setUpTwoFactor(accessToken);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/disable',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { password: 'password123', code: generateTotp(secret) },
+      });
+      expect(response.statusCode).toBe(204);
+
+      const meResponse = await app.inject({
+        method: 'GET',
+        url: '/auth/me',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+      expect(meResponse.json().data.twoFactorEnabled).toBe(false);
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'auth.2fa_disabled' })
+        .toArray();
+      expect(auditEntries).toHaveLength(1);
+    });
+
+    it('rejects disabling with the wrong password even with a valid code', async () => {
+      const registerResponse = await register(app, uniqueEmail());
+      const { accessToken } = registerResponse.json().data;
+      const { secret } = await setUpTwoFactor(accessToken);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/2fa/disable',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: { password: 'wrong-password', code: generateTotp(secret) },
+      });
+      expect(response.statusCode).toBe(401);
     });
   });
 });

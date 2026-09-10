@@ -42,9 +42,20 @@ export interface AdminRowPage<T> {
   nextCursor: string | null;
 }
 
+export interface AdminSignupsByDayDTO {
+  date: string;
+  talents: number;
+  employers: number;
+}
+
 export interface AdminStatsDTO {
   totalTalents: number;
   totalEmployers: number;
   activeListings: number;
   listingsByCategory: Record<string, number>;
+  // Both timeseries figures are scoped to the same `?days=` window (default 30, max 90) — see
+  // admin/service.ts's getStats and the module's report for why ledger-entry-type volume, not a
+  // listing-category volume, is what's shipped here.
+  signupsByDay: AdminSignupsByDayDTO[];
+  ledgerVolumeByType: Record<string, number>;
 }

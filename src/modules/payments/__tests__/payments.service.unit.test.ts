@@ -56,6 +56,7 @@ function buildService(overrides: {
     findByTxRef: vi.fn().mockResolvedValue(buildDeposit()),
     listForAccount: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     setCheckoutUrl: vi.fn().mockResolvedValue(undefined),
+    setProviderTransactionId: vi.fn().mockResolvedValue(undefined),
     markCompleted: vi.fn().mockResolvedValue(undefined),
     markFailed: vi.fn().mockResolvedValue(undefined),
     listAll: vi.fn().mockResolvedValue({ items: [buildDeposit()], nextCursor: null }),
@@ -175,12 +176,22 @@ describe('PaymentsService.handleChargeCompleted / handleTransferCompleted', () =
     expect(queue.enqueueReconcileDeposit).toHaveBeenCalledWith('deposit-1', 'flw-tx-1');
   });
 
+  // Persisted independent of the reconcile job outcome — this is what lets the reconciliation
+  // sweep (queue.ts's processReconcileSweep) find a deposit later if that job is lost/exhausts
+  // retries without a redelivered webhook. See DepositRepository.findStaleAwaitingPayment.
+  it('persists the provider transaction id before enqueueing reconciliation', async () => {
+    const { service, deposits } = buildService();
+    await service.handleChargeCompleted('dep_abc', 'flw-tx-1');
+    expect(deposits.setProviderTransactionId).toHaveBeenCalledWith('deposit-1', 'flw-tx-1');
+  });
+
   it('does nothing for an unknown tx_ref', async () => {
-    const { service, queue } = buildService({
+    const { service, queue, deposits } = buildService({
       deposits: { findByTxRef: vi.fn().mockResolvedValue(null) },
     });
     await service.handleChargeCompleted('unknown', 'flw-tx-1');
     expect(queue.enqueueReconcileDeposit).not.toHaveBeenCalled();
+    expect(deposits.setProviderTransactionId).not.toHaveBeenCalled();
   });
 
   it('enqueues withdrawal reconciliation only when found', async () => {

@@ -150,6 +150,28 @@ export class WithdrawalRepository {
     return { items, nextCursor: hasMore && last ? last.id : null };
   }
 
+  // Safety-net query for the reconciliation sweep (queue.ts's processReconcileSweep): withdrawals
+  // that have been sitting in 'processing' since before `olderThan`. Every 'processing' record
+  // already carries a providerTransferId (markProcessing sets both together), unlike deposits, so
+  // there's no "never got a provider id" case here to exclude — the $ne guard is just defensive.
+  async findStaleProcessing(
+    olderThan: Date,
+    limit = 100,
+  ): Promise<Array<{ id: string; providerTransferId: string }>> {
+    const docs = await this.collection
+      .find(
+        { status: 'processing', providerTransferId: { $ne: null }, updatedAt: { $lt: olderThan } },
+        { projection: { providerTransferId: 1 } },
+      )
+      .sort({ updatedAt: 1 })
+      .limit(limit)
+      .toArray();
+
+    return docs
+      .filter((doc): doc is WithdrawalDocument & { providerTransferId: string } => doc.providerTransferId !== null)
+      .map((doc) => ({ id: doc._id.toHexString(), providerTransferId: doc.providerTransferId }));
+  }
+
   async markProcessing(id: string, providerTransferId: string): Promise<void> {
     await this.collection.updateOne(
       { _id: new ObjectId(id) },

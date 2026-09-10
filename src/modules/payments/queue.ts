@@ -13,7 +13,8 @@ export type PaymentsJobName =
   | 'initiate-deposit'
   | 'reconcile-deposit'
   | 'initiate-withdrawal'
-  | 'reconcile-withdrawal';
+  | 'reconcile-withdrawal'
+  | 'reconcile-sweep';
 
 export interface InitiateDepositJob {
   depositId: string;
@@ -29,12 +30,24 @@ export interface ReconcileWithdrawalJob {
   withdrawalId: string;
   providerTransferId: string;
 }
+// Empty payload — the sweep takes no per-job input, it queries for whatever is stale at run time.
+export type ReconcileSweepJob = Record<string, never>;
 
 export type PaymentsJobPayload =
   | InitiateDepositJob
   | ReconcileDepositJob
   | InitiateWithdrawalJob
-  | ReconcileWithdrawalJob;
+  | ReconcileWithdrawalJob
+  | ReconcileSweepJob;
+
+// The reconciliation sweep re-checks records already stuck in a non-terminal state; it re-uses
+// the queue's existing reconcile-deposit/reconcile-withdrawal job handlers rather than
+// duplicating verification/apply logic (see processReconcileSweep below).
+export const RECONCILE_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+// A normal webhook arrives within seconds to a couple of minutes; 10 minutes gives ample margin
+// before a still-in-flight webhook gets swept as "possibly missed", while still catching a lost
+// webhook well within the hour.
+export const RECONCILE_STALE_THRESHOLD_MS = 10 * 60 * 1000;
 
 export interface AccountReaderPort {
   findById(id: string): Promise<{ email: string } | null>;
@@ -61,6 +74,11 @@ export interface DepositProcessingRepositoryPort {
     txRef: string;
     status: string;
   } | null>;
+  // Reconciliation sweep only — see processReconcileSweep and
+  // DepositRepository.findStaleAwaitingPayment for what qualifies as stale.
+  findStaleAwaitingPayment(
+    olderThan: Date,
+  ): Promise<Array<{ id: string; providerTransactionId: string }>>;
 }
 
 export interface WithdrawalProcessingRepositoryPort {
@@ -74,6 +92,18 @@ export interface WithdrawalProcessingRepositoryPort {
     holdEntryId: string;
     status: string;
   } | null>;
+  // Reconciliation sweep only — see processReconcileSweep and
+  // WithdrawalRepository.findStaleProcessing for what qualifies as stale.
+  findStaleProcessing(olderThan: Date): Promise<Array<{ id: string; providerTransferId: string }>>;
+}
+
+// The sweep dispatches into the SAME reconcile-deposit/reconcile-withdrawal job handlers the
+// webhook path uses (see processReconcileDeposit/processReconcileWithdrawal below) rather than
+// re-implementing verification — this is just PaymentsQueuePort's reconcile methods, reused here
+// so the worker doesn't need a second Queue/Redis connection to enqueue follow-up jobs.
+export interface ReconcileDispatchPort {
+  enqueueReconcileDeposit(depositId: string, providerTransactionId: string): Promise<void>;
+  enqueueReconcileWithdrawal(withdrawalId: string, providerTransferId: string): Promise<void>;
 }
 
 export function createPaymentsQueue(
@@ -99,6 +129,7 @@ export interface PaymentsWorkerDeps {
   accounts: AccountReaderPort;
   flutterwave: FlutterwaveClientPort;
   service: PaymentsResultApplierPort;
+  reconcile: ReconcileDispatchPort;
   depositRedirectUrl: string;
 }
 
@@ -182,6 +213,35 @@ async function processReconcileWithdrawal(
   await deps.service.applyWithdrawalVerification(data.withdrawalId, result);
 }
 
+// Reconciliation safety net (money-and-ledger skill's "reconciliation is a first-class scheduled
+// job" rule). Scope, deliberately narrow:
+//  - DOES: re-verify deposits stuck in 'awaiting_payment' and withdrawals stuck in 'processing'
+//    that already have a stored provider id, in case the webhook that would normally resolve
+//    them was never delivered (or was delivered but its reconcile-* job exhausted retries).
+//    Reuses the exact same processReconcileDeposit/processReconcileWithdrawal handlers the
+//    webhook path uses — no new verification/apply logic, no new Flutterwave API call.
+//  - DOES NOT: fix a deposit/withdrawal that never obtained a provider id in the first place
+//    (initiation itself failed, or the initiate-* job never ran) — those never had a provider-side
+//    outcome to re-verify against and are a separate, unrelated failure mode. It also isn't a full
+//    ledger-vs-provider-statement diff; it's a targeted safety net for this one failure shape.
+// Registered as a repeatable job in index.ts via queue.upsertJobScheduler.
+export async function processReconcileSweep(
+  _data: ReconcileSweepJob,
+  deps: PaymentsWorkerDeps,
+): Promise<void> {
+  const cutoff = new Date(Date.now() - RECONCILE_STALE_THRESHOLD_MS);
+
+  const staleDeposits = await deps.deposits.findStaleAwaitingPayment(cutoff);
+  for (const deposit of staleDeposits) {
+    await deps.reconcile.enqueueReconcileDeposit(deposit.id, deposit.providerTransactionId);
+  }
+
+  const staleWithdrawals = await deps.withdrawals.findStaleProcessing(cutoff);
+  for (const withdrawal of staleWithdrawals) {
+    await deps.reconcile.enqueueReconcileWithdrawal(withdrawal.id, withdrawal.providerTransferId);
+  }
+}
+
 // One queue/worker pair for every payments job kind, dispatched by job name — simpler wiring
 // than four separate queues while keeping each job's logic in its own function.
 export function createPaymentsWorker(
@@ -200,6 +260,8 @@ export function createPaymentsWorker(
           return processInitiateWithdrawal(job.data as InitiateWithdrawalJob, deps);
         case 'reconcile-withdrawal':
           return processReconcileWithdrawal(job.data as ReconcileWithdrawalJob, deps);
+        case 'reconcile-sweep':
+          return processReconcileSweep(job.data as ReconcileSweepJob, deps);
         default:
           throw new Error(`Unknown payments job: ${job.name}`);
       }

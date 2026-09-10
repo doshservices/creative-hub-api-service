@@ -9,6 +9,14 @@ export const listQuerySchema = {
   },
 } as const;
 
+export const statsQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    days: { type: 'integer', minimum: 1, maximum: 90, default: 30 },
+  },
+} as const;
+
 const walletProperties = {
   balanceMinor: { type: 'integer' },
   heldMinor: { type: 'integer' },
@@ -119,6 +127,18 @@ export const statsResponseSchema = {
         totalEmployers: { type: 'integer' },
         activeListings: { type: 'integer' },
         listingsByCategory: { type: 'object', additionalProperties: { type: 'integer' } },
+        signupsByDay: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              date: { type: 'string' },
+              talents: { type: 'integer' },
+              employers: { type: 'integer' },
+            },
+          },
+        },
+        ledgerVolumeByType: { type: 'object', additionalProperties: { type: 'integer' } },
       },
     },
   },

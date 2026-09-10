@@ -2,6 +2,7 @@ import type { Db } from 'mongodb';
 import type { FastifyInstance } from 'fastify';
 import { WalletRepository } from './wallet.repository.js';
 import { LedgerRepository } from './ledger.repository.js';
+import type { LedgerEntryType } from './ledger.model.js';
 import { WalletService, DEFAULT_CURRENCY, type TransactionRunnerPort } from './service.js';
 import { WalletController } from './controller.js';
 import { registerWalletRoutes } from './routes.js';
@@ -11,6 +12,7 @@ export { LedgerRepository } from './ledger.repository.js';
 export { WalletService, DEFAULT_CURRENCY } from './service.js';
 export type { MovementOptions, PageParams, AdminLedgerPageParams } from './service.js';
 export type { WalletDTO, LedgerEntryDTO, LedgerPage, WalletSummaryDTO } from './dto.js';
+export type { LedgerEntryType } from './ledger.model.js';
 
 // Batch balance lookup for other modules to compose (e.g. a future admin module's Manage
 // Talents/Employers tables) — constructs its own WalletRepository against the shared
@@ -23,6 +25,15 @@ export async function getBalancesByAccountIds(
   currency: string = DEFAULT_CURRENCY,
 ): Promise<Record<string, { balanceMinor: number; heldMinor: number; currency: string }>> {
   return new WalletRepository(db).getBalancesByAccountIds(accountIds, currency);
+}
+
+// Ledger volume by entry type for the admin composition module's timeseries stat — same "plain
+// function taking db, constructs its own repository" pattern as getBalancesByAccountIds above.
+export async function getLedgerVolumeByType(
+  db: Db,
+  params: { from: Date; to: Date },
+): Promise<Record<LedgerEntryType, number>> {
+  return new LedgerRepository(db).volumeByTypeForRange(params);
 }
 
 // Not wrapped in fastify-plugin — needs its own encapsulated context for `{ prefix: '/wallet' }`

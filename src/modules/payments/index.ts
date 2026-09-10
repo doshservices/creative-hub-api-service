@@ -10,7 +10,7 @@ import {
 import { DepositRepository } from './deposit.repository.js';
 import { WithdrawalRepository } from './withdrawal.repository.js';
 import { HttpFlutterwaveClient } from './provider.js';
-import { createPaymentsQueue, createPaymentsWorker } from './queue.js';
+import { createPaymentsQueue, createPaymentsWorker, RECONCILE_SWEEP_INTERVAL_MS } from './queue.js';
 import { PaymentsService, type PaymentsQueuePort } from './service.js';
 import { PaymentsController } from './controller.js';
 import { registerPaymentsRoutes } from './routes.js';
@@ -85,8 +85,27 @@ export default async function paymentsModule(app: FastifyInstance): Promise<void
     accounts: accountRepository,
     flutterwave: flutterwaveClient,
     service,
+    // The sweep dispatches into the same reconcile-deposit/reconcile-withdrawal jobs the webhook
+    // path enqueues — reusing queuePort rather than a second queue connection (see queue.ts).
+    reconcile: queuePort,
     depositRedirectUrl,
   });
+
+  // Reconciliation safety net (money-and-ledger skill: "a reconciliation job... is a first-class
+  // scheduled job, not an afterthought"). Registered as a BullMQ job scheduler — idempotent on
+  // `jobSchedulerId`, so re-running this on every app boot updates the existing schedule instead
+  // of creating a duplicate repeatable job (queue.add's old `repeat` option is no longer valid in
+  // the installed BullMQ version; upsertJobScheduler is the current, non-deprecated mechanism).
+  // What this DOES and does NOT cover is spelled out in queue.ts, next to processReconcileSweep —
+  // in short: it re-verifies deposits/withdrawals already stuck in a non-terminal state with a
+  // known provider id (a missed-webhook safety net), and explicitly does NOT fix records that
+  // never obtained a provider id in the first place (those failed at initiation, a separate,
+  // unrelated concern from what this job can address).
+  await queue.upsertJobScheduler(
+    'reconcile-sweep',
+    { every: RECONCILE_SWEEP_INTERVAL_MS },
+    { name: 'reconcile-sweep', data: {} },
+  );
 
   // Only land a record in 'failed' once every retry is exhausted — earlier attempts just retry
   // per the queue's backoff, per the third-party-provider skill. The withdrawal path also

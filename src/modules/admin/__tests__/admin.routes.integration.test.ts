@@ -348,5 +348,106 @@ describe('admin routes', () => {
       expect(data.activeListings).toBeGreaterThanOrEqual(1);
       expect(data.listingsByCategory.dance).toBeGreaterThanOrEqual(1);
     });
+
+    it('buckets signups by UTC calendar day within the requested window', async () => {
+      const adminToken = await loginAsAdmin(app);
+
+      const today = new Date();
+      const threeDaysAgo = new Date(today.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+      await registerAndGetToken(app, 'creative');
+      const backdatedEmployer = await registerAndGetToken(app, 'client');
+      // There's no way to backdate createdAt through the register API, so a directly-constructed
+      // Mongo update stands in for it, same technique the module's plan already calls for.
+      await app.mongo.db.collection('accounts').updateOne(
+        { _id: new ObjectId(backdatedEmployer.accountId) },
+        { $set: { createdAt: threeDaysAgo } },
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/admin/stats?days=7',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { signupsByDay } = response.json().data as {
+        signupsByDay: Array<{ date: string; talents: number; employers: number }>;
+      };
+
+      const todayKey = today.toISOString().slice(0, 10);
+      const threeDaysAgoKey = threeDaysAgo.toISOString().slice(0, 10);
+
+      const todayRow = signupsByDay.find((row) => row.date === todayKey);
+      expect(todayRow?.talents).toBeGreaterThanOrEqual(1);
+
+      const pastRow = signupsByDay.find((row) => row.date === threeDaysAgoKey);
+      expect(pastRow?.employers).toBeGreaterThanOrEqual(1);
+    });
+
+    it('excludes a signup older than the requested window', async () => {
+      const adminToken = await loginAsAdmin(app);
+
+      const tooOld = await registerAndGetToken(app, 'creative');
+      const longAgo = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+      await app.mongo.db.collection('accounts').updateOne(
+        { _id: new ObjectId(tooOld.accountId) },
+        { $set: { createdAt: longAgo } },
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/admin/stats?days=30',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      const { signupsByDay } = response.json().data as {
+        signupsByDay: Array<{ date: string; talents: number; employers: number }>;
+      };
+      const longAgoKey = longAgo.toISOString().slice(0, 10);
+      expect(signupsByDay.some((row) => row.date === longAgoKey)).toBe(false);
+    });
+
+    it('sums ledger volume by entry type within the requested window', async () => {
+      const adminToken = await loginAsAdmin(app);
+      const account = await registerAndGetToken(app, 'creative');
+
+      await walletService.credit(account.accountId, 'NGN', 5_000, {
+        idempotencyKey: `stats-credit-1-${account.accountId}`,
+      });
+      await walletService.credit(account.accountId, 'NGN', 3_000, {
+        idempotencyKey: `stats-credit-2-${account.accountId}`,
+      });
+      const hold = await walletService.hold(account.accountId, 'NGN', 1_000, {
+        idempotencyKey: `stats-hold-${account.accountId}`,
+      });
+      await walletService.releaseHold(hold.id, {
+        idempotencyKey: `stats-release-${account.accountId}`,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/admin/stats',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { ledgerVolumeByType } = response.json().data as {
+        ledgerVolumeByType: Record<string, number>;
+      };
+      expect(ledgerVolumeByType.credit).toBeGreaterThanOrEqual(8_000);
+      expect(ledgerVolumeByType.hold).toBeGreaterThanOrEqual(1_000);
+      expect(ledgerVolumeByType.hold_release).toBeGreaterThanOrEqual(1_000);
+    });
+
+    it('rejects a days value above the max cap', async () => {
+      const adminToken = await loginAsAdmin(app);
+      const response = await app.inject({
+        method: 'GET',
+        url: '/admin/stats?days=91',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      expect(response.statusCode).toBe(400);
+    });
   });
 });

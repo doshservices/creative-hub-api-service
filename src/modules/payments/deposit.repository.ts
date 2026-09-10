@@ -108,6 +108,41 @@ export class DepositRepository {
     );
   }
 
+  // Persists the provider transaction id as soon as it's known (webhook received), independent
+  // of whether verification/completion ever follows — this is what lets a deposit stuck in
+  // 'awaiting_payment' still be found by findStaleAwaitingPayment below if the reconcile job
+  // that was enqueued alongside it is lost or exhausts retries before a redelivered webhook.
+  async setProviderTransactionId(id: string, providerTransactionId: string): Promise<void> {
+    await this.collection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { providerTransactionId, updatedAt: new Date() } },
+    );
+  }
+
+  // Safety-net query for the reconciliation sweep (queue.ts's processReconcileSweep): deposits
+  // that have been sitting in 'awaiting_payment' since before `olderThan` AND already have a
+  // provider transaction id on file (i.e. a webhook was received at some point, so there's
+  // something to re-verify). A deposit with no provider id yet never got a webhook at all — that
+  // is a separate, unrecoverable-by-verify case this query deliberately excludes; see the
+  // reconciliation job's registration comment in index.ts.
+  async findStaleAwaitingPayment(
+    olderThan: Date,
+    limit = 100,
+  ): Promise<Array<{ id: string; providerTransactionId: string }>> {
+    const docs = await this.collection
+      .find(
+        { status: 'awaiting_payment', providerTransactionId: { $ne: null }, updatedAt: { $lt: olderThan } },
+        { projection: { providerTransactionId: 1 } },
+      )
+      .sort({ updatedAt: 1 })
+      .limit(limit)
+      .toArray();
+
+    return docs
+      .filter((doc): doc is DepositDocument & { providerTransactionId: string } => doc.providerTransactionId !== null)
+      .map((doc) => ({ id: doc._id.toHexString(), providerTransactionId: doc.providerTransactionId }));
+  }
+
   async markCompleted(id: string, providerTransactionId: string): Promise<DepositDTO | null> {
     const result = await this.collection.findOneAndUpdate(
       { _id: new ObjectId(id) },

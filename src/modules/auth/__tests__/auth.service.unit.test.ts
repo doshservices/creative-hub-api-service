@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ConflictError, UnauthorizedError } from '../../../common/errors.js';
+import { BadRequestError, ConflictError, UnauthorizedError } from '../../../common/errors.js';
 import { PERMISSIONS } from '../../../common/permissions.js';
 import type { AccountDTO } from '../dto.js';
-import type { AccountType } from '../model.js';
+import type { AccountType, TwoFactorState } from '../model.js';
 import { hashPassword } from '../password.js';
+import { generateBase32Secret, generateTotp } from '../totp.js';
 import type {
   AccountRepositoryPort,
   AuditRecorderPort,
@@ -22,7 +23,18 @@ function buildAccount(overrides: Partial<AccountDTO> = {}): AccountDTO {
     accountType: 'creative',
     permissions: [],
     status: 'active',
+    twoFactorEnabled: false,
     createdAt: new Date(),
+    ...overrides,
+  };
+}
+
+function buildTwoFactorState(overrides: Partial<TwoFactorState> = {}): TwoFactorState {
+  return {
+    enabled: false,
+    secret: null,
+    pendingSecret: null,
+    backupCodeHashes: [],
     ...overrides,
   };
 }
@@ -53,6 +65,11 @@ function buildService(overrides: {
     updateStatus: vi.fn().mockResolvedValue(buildAccount()),
     findManyByIds: vi.fn().mockResolvedValue([]),
     list: vi.fn().mockResolvedValue({ items: [buildAccount()], nextCursor: null }),
+    findTwoFactorStateById: vi.fn().mockResolvedValue(buildTwoFactorState()),
+    setPendingTwoFactorSecret: vi.fn().mockResolvedValue(undefined),
+    activateTwoFactor: vi.fn().mockResolvedValue(undefined),
+    deactivateTwoFactor: vi.fn().mockResolvedValue(undefined),
+    removeBackupCodeHash: vi.fn().mockResolvedValue(undefined),
     ...overrides.repository,
   };
   const refreshTokens: RefreshTokenStorePort = {
@@ -169,13 +186,36 @@ describe('AuthService.login', () => {
 
     const tokens = await service.login('dev@example.com', 'password123');
 
-    expect(tokens.accessToken).toBe('signed-access-token');
+    expect('accessToken' in tokens && tokens.accessToken).toBe('signed-access-token');
     expect(audit.record).toHaveBeenCalledWith({
       actorId: 'account-1',
       action: 'auth.login',
       targetType: 'account',
       targetId: 'account-1',
     });
+  });
+
+  it('returns a two-factor challenge instead of tokens when 2FA is enabled, and does not audit yet', async () => {
+    const passwordHash = await hashPassword('password123');
+    const { service, refreshTokens, audit } = buildService({
+      repository: {
+        findByEmailWithCredentials: vi.fn().mockResolvedValue({ ...buildAccount(), passwordHash }),
+        findTwoFactorStateById: vi
+          .fn()
+          .mockResolvedValue(buildTwoFactorState({ enabled: true, secret: generateBase32Secret() })),
+      },
+    });
+
+    const result = await service.login('dev@example.com', 'password123');
+
+    expect(result).toMatchObject({ requiresTwoFactor: true, twoFactorToken: expect.any(String) });
+    expect(refreshTokens.set).toHaveBeenCalledWith(
+      expect.stringContaining('auth:2fa-challenge:'),
+      'account-1',
+      'EX',
+      300,
+    );
+    expect(audit.record).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown email without revealing which part was wrong', async () => {
@@ -328,5 +368,191 @@ describe('AuthService.suspendAccount / reactivateAccount', () => {
     const { service } = buildService({ repository: { updateStatus: vi.fn().mockResolvedValue(null) } });
 
     await expect(service.suspendAccount('admin-1', 'missing')).rejects.toThrow();
+  });
+});
+
+describe('AuthService.setupTwoFactor', () => {
+  it('generates and stores a pending secret, returning an otpauth URL', async () => {
+    const { service, repository } = buildService({
+      repository: { findById: vi.fn().mockResolvedValue(buildAccount({ email: 'dev@example.com' })) },
+    });
+
+    const result = await service.setupTwoFactor('account-1');
+
+    expect(repository.setPendingTwoFactorSecret).toHaveBeenCalledWith('account-1', result.secret);
+    expect(result.otpauthUrl).toContain(encodeURIComponent('dev@example.com'));
+    expect(result.otpauthUrl).toContain(result.secret);
+  });
+
+  it('throws when the account no longer exists', async () => {
+    const { service } = buildService({ repository: { findById: vi.fn().mockResolvedValue(null) } });
+
+    await expect(service.setupTwoFactor('missing')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+describe('AuthService.enableTwoFactor', () => {
+  it('rejects when there is no pending setup', async () => {
+    const { service } = buildService({
+      repository: { findTwoFactorStateById: vi.fn().mockResolvedValue(buildTwoFactorState()) },
+    });
+
+    await expect(service.enableTwoFactor('account-1', '123456')).rejects.toBeInstanceOf(
+      BadRequestError,
+    );
+  });
+
+  it('rejects an invalid code', async () => {
+    const secret = generateBase32Secret();
+    const { service } = buildService({
+      repository: {
+        findTwoFactorStateById: vi.fn().mockResolvedValue(buildTwoFactorState({ pendingSecret: secret })),
+      },
+    });
+
+    await expect(service.enableTwoFactor('account-1', '000000')).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
+  it('activates 2FA and returns backup codes on a valid code', async () => {
+    const secret = generateBase32Secret();
+    const code = generateTotp(secret);
+    const { service, repository, audit } = buildService({
+      repository: {
+        findTwoFactorStateById: vi.fn().mockResolvedValue(buildTwoFactorState({ pendingSecret: secret })),
+      },
+    });
+
+    const result = await service.enableTwoFactor('account-1', code);
+
+    expect(result.backupCodes).toHaveLength(8);
+    expect(repository.activateTwoFactor).toHaveBeenCalledWith(
+      'account-1',
+      secret,
+      expect.arrayContaining([expect.any(String)]),
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'account-1', action: 'auth.2fa_enabled' }),
+    );
+  });
+});
+
+describe('AuthService.disableTwoFactor', () => {
+  it('rejects an incorrect password', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const { service } = buildService({
+      repository: { findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }) },
+    });
+
+    await expect(
+      service.disableTwoFactor('account-1', 'wrong-password', '123456'),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it('rejects an invalid code even with the correct password', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const secret = generateBase32Secret();
+    const { service } = buildService({
+      repository: {
+        findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }),
+        findTwoFactorStateById: vi
+          .fn()
+          .mockResolvedValue(buildTwoFactorState({ enabled: true, secret })),
+      },
+    });
+
+    await expect(
+      service.disableTwoFactor('account-1', 'correct-password', '000000'),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+
+  it('disables 2FA and records an audit entry on a valid TOTP code', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const secret = generateBase32Secret();
+    const code = generateTotp(secret);
+    const { service, repository, audit } = buildService({
+      repository: {
+        findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }),
+        findTwoFactorStateById: vi
+          .fn()
+          .mockResolvedValue(buildTwoFactorState({ enabled: true, secret })),
+      },
+    });
+
+    await service.disableTwoFactor('account-1', 'correct-password', code);
+
+    expect(repository.deactivateTwoFactor).toHaveBeenCalledWith('account-1');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'account-1', action: 'auth.2fa_disabled' }),
+    );
+  });
+
+  it('accepts a valid backup code and consumes it', async () => {
+    const passwordHash = await hashPassword('correct-password');
+    const backupCode = '1234-56789';
+    const backupCodeHash = await hashPassword(backupCode);
+    const { service, repository } = buildService({
+      repository: {
+        findCredentialsById: vi.fn().mockResolvedValue({ id: 'account-1', passwordHash }),
+        findTwoFactorStateById: vi.fn().mockResolvedValue(
+          buildTwoFactorState({ enabled: true, secret: generateBase32Secret(), backupCodeHashes: [backupCodeHash] }),
+        ),
+      },
+    });
+
+    await service.disableTwoFactor('account-1', 'correct-password', backupCode);
+
+    expect(repository.removeBackupCodeHash).toHaveBeenCalledWith('account-1', backupCodeHash);
+  });
+});
+
+describe('AuthService.verifyTwoFactorLogin', () => {
+  it('rejects an unknown or expired challenge token', async () => {
+    const { service } = buildService({ refreshTokens: { get: vi.fn().mockResolvedValue(null) } });
+
+    await expect(service.verifyTwoFactorLogin('missing-token', '123456')).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+  });
+
+  it('rejects an invalid code and does not issue tokens', async () => {
+    const secret = generateBase32Secret();
+    const { service, refreshTokens } = buildService({
+      refreshTokens: { get: vi.fn().mockResolvedValue('account-1') },
+      repository: {
+        findTwoFactorStateById: vi
+          .fn()
+          .mockResolvedValue(buildTwoFactorState({ enabled: true, secret })),
+      },
+    });
+
+    await expect(service.verifyTwoFactorLogin('challenge-token', '000000')).rejects.toBeInstanceOf(
+      UnauthorizedError,
+    );
+    // The challenge is consumed (deleted) on the first attempt, valid or not — no unlimited
+    // guessing against one token.
+    expect(refreshTokens.del).toHaveBeenCalledWith('auth:2fa-challenge:challenge-token');
+  });
+
+  it('issues tokens and records an audit entry on a valid code', async () => {
+    const secret = generateBase32Secret();
+    const code = generateTotp(secret);
+    const { service, audit } = buildService({
+      refreshTokens: { get: vi.fn().mockResolvedValue('account-1') },
+      repository: {
+        findTwoFactorStateById: vi
+          .fn()
+          .mockResolvedValue(buildTwoFactorState({ enabled: true, secret })),
+        findById: vi.fn().mockResolvedValue(buildAccount()),
+      },
+    });
+
+    const tokens = await service.verifyTwoFactorLogin('challenge-token', code);
+
+    expect(tokens.accessToken).toBe('signed-access-token');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ actorId: 'account-1', action: 'auth.login' }),
+    );
   });
 });

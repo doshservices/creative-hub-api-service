@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { AccountRepository, countAccounts } from '../auth/index.js';
+import { AccountRepository, countAccounts, getSignupsByDay } from '../auth/index.js';
 import { getEmployerProfilesByAccountIds, getManyByAccountIds } from '../users/index.js';
 import { getStatusesByAccountIds } from '../identity/index.js';
-import { getBalancesByAccountIds } from '../wallet/index.js';
+import { getBalancesByAccountIds, getLedgerVolumeByType } from '../wallet/index.js';
 import { getPlatformListingStats } from '../listings/index.js';
 import { AdminService } from './service.js';
 import { AdminController } from './controller.js';
@@ -47,6 +47,8 @@ export default async function adminModule(app: FastifyInstance): Promise<void> {
     { getStatusesByAccountIds: (accountIds) => getStatusesByAccountIds(db, accountIds) },
     { getBalancesByAccountIds: (accountIds) => getBalancesByAccountIds(db, accountIds) },
     { getPlatformListingStats: () => getPlatformListingStats(db) },
+    { getSignupsByDay: (params) => getSignupsByDay(db, params) },
+    { getLedgerVolumeByType: (params) => getLedgerVolumeByType(db, params) },
   );
   const controller = new AdminController(service);
   registerAdminRoutes(app, controller);

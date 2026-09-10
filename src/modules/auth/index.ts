@@ -18,6 +18,15 @@ export async function countAccounts(db: Db, accountType?: AccountType): Promise<
   return new AccountRepository(db).count(accountType);
 }
 
+// Signups-per-day for the admin composition module's timeseries stat — same "plain function
+// taking db, constructs its own repository" pattern as countAccounts above.
+export async function getSignupsByDay(
+  db: Db,
+  params: { from: Date; to: Date; accountType?: AccountType },
+): Promise<Array<{ date: string; count: number }>> {
+  return new AccountRepository(db).countByDayForRange(params);
+}
+
 // Not wrapped in fastify-plugin: this module needs its own encapsulated context so the
 // `{ prefix: '/auth' }` passed at registration actually applies to its routes. It still sees
 // app.mongo/app.redis/app.jwt/app.audit/app.authenticate/app.config, which are decorated on

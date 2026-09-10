@@ -23,4 +23,7 @@ export const depositIndexes = [
   { key: { txRef: 1 }, name: 'txRef_unique', unique: true },
   // Backs the admin cross-account list (GET /admin/deposits), optionally filtered by status.
   { key: { status: 1, _id: -1 }, name: 'status_id', unique: false },
+  // Backs the reconciliation sweep's stale query (queue.ts's processReconcileSweep): deposits
+  // stuck in 'awaiting_payment' sorted by how long ago they were last touched.
+  { key: { status: 1, updatedAt: 1 }, name: 'status_updatedAt', unique: false },
 ] as const;

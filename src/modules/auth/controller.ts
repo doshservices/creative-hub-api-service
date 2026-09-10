@@ -28,6 +28,20 @@ export interface AccountIdParams {
   id: string;
 }
 
+export interface VerifyTwoFactorLoginBody {
+  twoFactorToken: string;
+  code: string;
+}
+
+export interface EnableTwoFactorBody {
+  code: string;
+}
+
+export interface DisableTwoFactorBody {
+  password: string;
+  code: string;
+}
+
 export class AuthController {
   constructor(private readonly service: AuthService) {}
 
@@ -44,6 +58,17 @@ export class AuthController {
     reply: FastifyReply,
   ): Promise<void> => {
     const data = await this.service.login(request.body.email, request.body.password);
+    await reply.send({ success: true, data });
+  };
+
+  verifyTwoFactorLogin = async (
+    request: FastifyRequest<{ Body: VerifyTwoFactorLoginBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.verifyTwoFactorLogin(
+      request.body.twoFactorToken,
+      request.body.code,
+    );
     await reply.send({ success: true, data });
   };
 
@@ -77,6 +102,27 @@ export class AuthController {
       request.body.currentPassword,
       request.body.newPassword,
     );
+    await reply.code(204).send();
+  };
+
+  setupTwoFactor = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const data = await this.service.setupTwoFactor(request.user.sub);
+    await reply.send({ success: true, data });
+  };
+
+  enableTwoFactor = async (
+    request: FastifyRequest<{ Body: EnableTwoFactorBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.enableTwoFactor(request.user.sub, request.body.code);
+    await reply.send({ success: true, data });
+  };
+
+  disableTwoFactor = async (
+    request: FastifyRequest<{ Body: DisableTwoFactorBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    await this.service.disableTwoFactor(request.user.sub, request.body.password, request.body.code);
     await reply.code(204).send();
   };
 

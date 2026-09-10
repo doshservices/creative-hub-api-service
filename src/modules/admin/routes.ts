@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { PERMISSIONS } from '../../common/permissions.js';
-import type { AdminController, ListQuery } from './controller.js';
+import type { AdminController, ListQuery, StatsQuery } from './controller.js';
 import {
   employerPageResponseSchema,
   listQuerySchema,
+  statsQuerySchema,
   statsResponseSchema,
   talentPageResponseSchema,
 } from './schema.js';
@@ -32,11 +33,11 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
     controller.listEmployers,
   );
 
-  app.get(
+  app.get<{ Querystring: StatsQuery }>(
     '/stats',
     {
       preHandler: [app.authenticate, requireAdminUsersManage],
-      schema: { response: { 200: statsResponseSchema } },
+      schema: { querystring: statsQuerySchema, response: { 200: statsResponseSchema } },
     },
     controller.stats,
   );

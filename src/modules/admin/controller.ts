@@ -1,9 +1,13 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { AdminService } from './service.js';
+import { DEFAULT_STATS_DAYS, type AdminService } from './service.js';
 
 export interface ListQuery {
   limit?: number;
   cursor?: string;
+}
+
+export interface StatsQuery {
+  days?: number;
 }
 
 const DEFAULT_LIMIT = 20;
@@ -34,8 +38,11 @@ export class AdminController {
     await reply.send({ success: true, data });
   };
 
-  stats = async (_request: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const data = await this.service.getStats();
+  stats = async (
+    request: FastifyRequest<{ Querystring: StatsQuery }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.getStats({ days: request.query.days ?? DEFAULT_STATS_DAYS });
     await reply.send({ success: true, data });
   };
 }

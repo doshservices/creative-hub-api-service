@@ -182,4 +182,32 @@ export class LedgerRepository {
     const last = items[items.length - 1];
     return { items, nextCursor: hasMore && last ? last.id : null };
   }
+
+  // Ledger volume by entry type for the admin composition module's timeseries stat — a $group
+  // aggregation summing amountMinor by type over a createdAt range, never a per-type
+  // countDocuments/sum loop. Explicit projection via $match+$group, no find({}).
+  async volumeByTypeForRange(params: {
+    from: Date;
+    to: Date;
+  }): Promise<Record<LedgerEntryType, number>> {
+    const pipeline = [
+      { $match: { createdAt: { $gte: params.from, $lte: params.to } } },
+      { $group: { _id: '$type', totalMinor: { $sum: '$amountMinor' } } },
+    ];
+    const rows = await this.collection
+      .aggregate<{ _id: LedgerEntryType; totalMinor: number }>(pipeline)
+      .toArray();
+
+    const result: Record<LedgerEntryType, number> = {
+      credit: 0,
+      debit: 0,
+      hold: 0,
+      hold_release: 0,
+      hold_capture: 0,
+    };
+    for (const row of rows) {
+      result[row._id] = row.totalMinor;
+    }
+    return result;
+  }
 }

@@ -1,14 +1,27 @@
 import type { FastifyInstance } from 'fastify';
 import { PERMISSIONS } from '../../common/permissions.js';
 import { objectIdSchema } from '../../common/schema.js';
-import type { AccountIdParams, AuthController, ChangePasswordBody } from './controller.js';
+import type {
+  AccountIdParams,
+  AuthController,
+  ChangePasswordBody,
+  DisableTwoFactorBody,
+  EnableTwoFactorBody,
+  VerifyTwoFactorLoginBody,
+} from './controller.js';
 import {
   accountResponseSchema,
   authTokensResponseSchema,
   changePasswordBodySchema,
+  disableTwoFactorBodySchema,
+  enableTwoFactorBodySchema,
+  enableTwoFactorResponseSchema,
   loginBodySchema,
+  loginResponseSchema,
   refreshBodySchema,
   registerBodySchema,
+  setupTwoFactorResponseSchema,
+  verifyTwoFactorLoginBodySchema,
 } from './schema.js';
 
 const accountIdParamSchema = {
@@ -28,8 +41,19 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
 
   app.post(
     '/login',
-    { schema: { body: loginBodySchema, response: { 200: authTokensResponseSchema } } },
+    { schema: { body: loginBodySchema, response: { 200: loginResponseSchema } } },
     controller.login,
+  );
+
+  app.post<{ Body: VerifyTwoFactorLoginBody }>(
+    '/login/verify-2fa',
+    {
+      schema: {
+        body: verifyTwoFactorLoginBodySchema,
+        response: { 200: authTokensResponseSchema },
+      },
+    },
+    controller.verifyTwoFactorLogin,
   );
 
   app.post(
@@ -50,6 +74,27 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
     '/me/password',
     { preHandler: app.authenticate, schema: { body: changePasswordBodySchema } },
     controller.changePassword,
+  );
+
+  app.post(
+    '/2fa/setup',
+    { preHandler: app.authenticate, schema: { response: { 200: setupTwoFactorResponseSchema } } },
+    controller.setupTwoFactor,
+  );
+
+  app.post<{ Body: EnableTwoFactorBody }>(
+    '/2fa/enable',
+    {
+      preHandler: app.authenticate,
+      schema: { body: enableTwoFactorBodySchema, response: { 200: enableTwoFactorResponseSchema } },
+    },
+    controller.enableTwoFactor,
+  );
+
+  app.post<{ Body: DisableTwoFactorBody }>(
+    '/2fa/disable',
+    { preHandler: app.authenticate, schema: { body: disableTwoFactorBodySchema } },
+    controller.disableTwoFactor,
   );
 
   app.put<{ Params: AccountIdParams }>(

@@ -47,6 +47,7 @@ export interface DepositRepositoryPort {
   findByTxRef(txRef: string): Promise<DepositDTO | null>;
   listForAccount(accountId: string, params: PageParams): Promise<DepositPage>;
   setCheckoutUrl(id: string, checkoutUrl: string): Promise<void>;
+  setProviderTransactionId(id: string, providerTransactionId: string): Promise<void>;
   markCompleted(id: string, providerTransactionId: string): Promise<unknown>;
   markFailed(id: string, reason: string): Promise<void>;
   listAll(params: AdminDepositPageParams): Promise<DepositPage>;
@@ -208,6 +209,11 @@ export class PaymentsService {
     if (!deposit) {
       return;
     }
+    // Persisted immediately, independent of whether the reconcile job enqueued below ever runs
+    // to completion — this is what lets the reconciliation sweep (queue.ts's
+    // processReconcileSweep) find this deposit later if the job is lost or exhausts retries
+    // without a redelivered webhook. See DepositRepository.findStaleAwaitingPayment.
+    await this.deposits.setProviderTransactionId(deposit.id, providerTransactionId);
     await this.queue.enqueueReconcileDeposit(deposit.id, providerTransactionId);
   }
 

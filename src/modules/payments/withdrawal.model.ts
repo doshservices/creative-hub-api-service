@@ -29,4 +29,7 @@ export const withdrawalIndexes = [
   { key: { reference: 1 }, name: 'reference_unique', unique: true },
   // Backs the admin cross-account list (GET /admin/withdrawals), optionally filtered by status.
   { key: { status: 1, _id: -1 }, name: 'status_id', unique: false },
+  // Backs the reconciliation sweep's stale query (queue.ts's processReconcileSweep): withdrawals
+  // stuck in 'processing' sorted by how long ago they were last touched.
+  { key: { status: 1, updatedAt: 1 }, name: 'status_updatedAt', unique: false },
 ] as const;
