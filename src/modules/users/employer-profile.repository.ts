@@ -76,4 +76,19 @@ export class EmployerProfileRepository {
     );
     return doc ? toDTO(doc) : null;
   }
+
+  // Batch lookup for a future admin composition module (Manage Employers) — a single $in query,
+  // never one findById per row. Same pattern as CreativeProfileRepository.findManyByAccountIds.
+  async findManyByAccountIds(accountIds: string[]): Promise<EmployerProfileDTO[]> {
+    if (accountIds.length === 0) {
+      return [];
+    }
+    const docs = await this.collection
+      .find(
+        { accountId: { $in: accountIds.map((id) => new ObjectId(id)) } },
+        { projection: EMPLOYER_PROFILE_PROJECTION },
+      )
+      .toArray();
+    return docs.map(toDTO);
+  }
 }

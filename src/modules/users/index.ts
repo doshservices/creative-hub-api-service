@@ -1,5 +1,6 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Db } from 'mongodb';
 import type { FastifyInstance } from 'fastify';
 import { AccountRepository } from '../auth/index.js';
 import { FileRepository } from '../files/index.js';
@@ -10,8 +11,26 @@ import { UsersService, type UploadUrlSignerPort } from './service.js';
 import { UsersController } from './controller.js';
 import { registerUsersRoutes } from './routes.js';
 import { registerUserEventSubscriptions } from './events.js';
+import type { CreativeProfileDTO, EmployerProfileDTO } from './dto.js';
 
-export type { CreativeProfileDTO, PublicTalentDTO, PublicTalentPage } from './dto.js';
+export type { CreativeProfileDTO, EmployerProfileDTO, PublicTalentDTO, PublicTalentPage } from './dto.js';
+
+// Batch exports for a future admin composition module (Manage Talents/Manage Employers) — a
+// single $in query, never one findById per row. See wallet/index.ts's getBalancesByAccountIds
+// for the same pattern.
+export async function getManyByAccountIds(
+  db: Db,
+  accountIds: string[],
+): Promise<CreativeProfileDTO[]> {
+  return new CreativeProfileRepository(db).findManyByAccountIds(accountIds);
+}
+
+export async function getEmployerProfilesByAccountIds(
+  db: Db,
+  accountIds: string[],
+): Promise<EmployerProfileDTO[]> {
+  return new EmployerProfileRepository(db).findManyByAccountIds(accountIds);
+}
 
 const UPLOAD_URL_TTL_SECONDS = 300;
 

@@ -1,5 +1,6 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { Redis } from 'ioredis';
+import type { Db } from 'mongodb';
 import type { FastifyInstance } from 'fastify';
 import { KycVerificationRepository } from './repository.js';
 import { HttpPremblyClient } from './provider.js';
@@ -7,6 +8,17 @@ import { createKycQueue, createKycWorker, type DocumentBytesFetcherPort } from '
 import { IdentityService, type QueueEnqueuerPort } from './service.js';
 import { IdentityController } from './controller.js';
 import { registerIdentityRoutes } from './routes.js';
+import type { KycStatus } from './model.js';
+
+// Batch export for a future admin composition module (Manage Talents/Employers) — a single
+// $in query, never one findById per row. See wallet/index.ts's getBalancesByAccountIds for the
+// same pattern.
+export async function getStatusesByAccountIds(
+  db: Db,
+  accountIds: string[],
+): Promise<Array<{ accountId: string; status: KycStatus }>> {
+  return new KycVerificationRepository(db).findStatusesByAccountIds(accountIds);
+}
 
 // Not wrapped in fastify-plugin — needs its own encapsulated context for
 // `{ prefix: '/identity' }` to apply, same reasoning as the other route-registering modules.
