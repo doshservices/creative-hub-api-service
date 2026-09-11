@@ -32,6 +32,8 @@ export function registerCollaborationRoutes(
       schema: {
         tags: ['Collaboration'],
         summary: 'Submit a deliverable on a contract',
+        description:
+          '**Creative accounts only** (requires `collaboration:submit`), must be the creative party on the contract.',
         params: contractIdParamSchema,
         body: submitDeliverableBodySchema,
         response: { 201: deliverableResponseSchema },
@@ -47,6 +49,7 @@ export function registerCollaborationRoutes(
       schema: {
         tags: ['Collaboration'],
         summary: 'List deliverables submitted on a contract',
+        description: '**Any account type** — must be a party (client or creative) to the contract.',
         params: contractIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: deliverablePageResponseSchema },
@@ -62,6 +65,7 @@ export function registerCollaborationRoutes(
       schema: {
         tags: ['Collaboration'],
         summary: 'Get a deliverable by id',
+        description: "**Any account type** — must be a party to the deliverable's contract.",
         params: deliverableIdParamSchema,
         response: { 200: deliverableResponseSchema },
       },
@@ -76,6 +80,8 @@ export function registerCollaborationRoutes(
       schema: {
         tags: ['Collaboration'],
         summary: 'Review a submitted deliverable (approve or request changes)',
+        description:
+          '**Client (employer) accounts only** (requires `collaboration:review`), must be the client party on the contract.',
         params: deliverableIdParamSchema,
         body: reviewDeliverableBodySchema,
         response: { 200: deliverableResponseSchema },

@@ -26,7 +26,8 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
       schema: {
         tags: ['Files'],
         summary: 'Get a presigned S3 upload URL for a new file',
-        description: 'The object is not recorded until the upload is confirmed via POST /:id/confirm.',
+        description:
+          'The object is not recorded until the upload is confirmed via POST /:id/confirm. **Creative or client accounts** (requires `files:upload`, granted to both account types by default).',
         body: createUploadUrlBodySchema,
         response: { 201: uploadUrlResponseSchema },
       },
@@ -41,6 +42,7 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
       schema: {
         tags: ['Files'],
         summary: 'Confirm a completed upload',
+        description: '**Creative or client accounts** (requires `files:upload`), owner only.',
         params: fileIdParamSchema,
         response: { 200: fileResponseSchema },
       },
@@ -55,6 +57,7 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
       schema: {
         tags: ['Files'],
         summary: "Get one of the caller's files by id",
+        description: '**Any account type**, owner only.',
         params: fileIdParamSchema,
         response: { 200: fileResponseSchema },
       },
@@ -69,6 +72,7 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
       schema: {
         tags: ['Files'],
         summary: "List the caller's own files",
+        description: "**Any account type** — lists the caller's own files.",
         querystring: listQuerySchema,
         response: { 200: filePageResponseSchema },
       },
@@ -83,6 +87,7 @@ export function registerFilesRoutes(app: FastifyInstance, controller: FileContro
       schema: {
         tags: ['Files'],
         summary: 'Get a presigned S3 download URL for a file',
+        description: '**Any account type**, owner only.',
         params: fileIdParamSchema,
         response: { 200: downloadUrlResponseSchema },
       },

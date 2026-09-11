@@ -57,6 +57,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Apply to a listing',
+        description:
+          '**Creative accounts only** (requires `hiring:apply`, granted to `creative` accounts by default).',
         body: applyBodySchema,
         response: { 201: applicationResponseSchema },
       },
@@ -71,6 +73,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: "List the caller's own applications",
+        description: '**Creative accounts only** (requires `hiring:apply`).',
         querystring: listQuerySchema,
         response: { 200: applicationPageResponseSchema },
       },
@@ -85,6 +88,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'List applications for a listing (owner only)',
+        description: '**Client (employer) accounts only** (requires `listings:write`), owner of the listing.',
         params: listingIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: applicationPageResponseSchema },
@@ -100,6 +104,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: "Update an application's status (owner only)",
+        description:
+          '**Client (employer) accounts only** (requires `listings:write`), owner of the listing the application is for.',
         params: applicationIdParamSchema,
         body: updateApplicationStatusBodySchema,
         response: { 200: applicationResponseSchema },
@@ -118,6 +124,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Withdraw an application',
+        description: '**Creative accounts only** (requires `hiring:apply`), owner of the application.',
         params: applicationIdParamSchema,
         response: { 200: applicationResponseSchema },
       },
@@ -132,6 +139,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: "List the caller's own contracts",
+        description:
+          "**Any account type** — both `creative` and `client` accounts see their own contracts (whichever side they're on).",
         querystring: listQuerySchema,
         response: { 200: contractPageResponseSchema },
       },
@@ -148,6 +157,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Complete a contract and release escrow to the creative',
+        description:
+          "**Client (employer) accounts only**, owner of the contract. No special permission beyond authentication — ownership is what's checked.",
         params: idParamSchema,
         response: { 200: contractResponseSchema },
       },
@@ -164,6 +175,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Invite a talent to a listing',
+        description: '**Client (employer) accounts only** (requires `listings:write`), owner of the listing.',
         params: listingIdParamSchema,
         body: inviteTalentBodySchema,
         response: { 201: invitationResponseSchema },
@@ -179,6 +191,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: "List the caller's own invitations",
+        description: '**Creative accounts only** (requires `hiring:apply`).',
         querystring: listQuerySchema,
         response: { 200: invitationPageResponseSchema },
       },
@@ -195,6 +208,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Accept a talent invitation',
+        description: '**Creative accounts only** (requires `hiring:apply`), the invited talent.',
         params: idParamSchema,
         response: { 200: applicationResponseSchema },
       },
@@ -209,6 +223,7 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: 'Decline a talent invitation',
+        description: '**Creative accounts only** (requires `hiring:apply`), the invited talent.',
         params: idParamSchema,
         response: { 200: invitationResponseSchema },
       },
@@ -225,6 +240,8 @@ export function registerHiringRoutes(app: FastifyInstance, controller: HiringCon
       schema: {
         tags: ['Hiring'],
         summary: "Get the caller's hiring stats (shape differs by account type)",
+        description:
+          '**Any account type** — the response shape differs by caller: a `creative` account gets `{ activeContracts, pendingApplications }`, a `client` account gets `{ applicantsWaiting }`.',
         response: { 200: hiringStatsResponseSchema },
       },
     },

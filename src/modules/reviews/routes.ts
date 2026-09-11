@@ -24,6 +24,8 @@ export function registerReviewsRoutes(app: FastifyInstance, controller: ReviewsC
       schema: {
         tags: ['Reviews'],
         summary: 'Submit a review on a completed contract',
+        description:
+          '**Creative or client accounts** (requires `reviews:submit`, granted to both account types by default), must be a party to the completed contract.',
         params: contractIdParamSchema,
         body: submitReviewBodySchema,
         response: { 201: reviewResponseSchema },
@@ -41,6 +43,7 @@ export function registerReviewsRoutes(app: FastifyInstance, controller: ReviewsC
       schema: {
         tags: ['Reviews'],
         summary: "List a talent's received reviews",
+        description: '**Any account type** — public browse.',
         params: accountIdParamSchema,
         querystring: listQuerySchema,
         response: { 200: reviewPageResponseSchema },

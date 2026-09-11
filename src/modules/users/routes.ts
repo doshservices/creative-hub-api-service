@@ -43,6 +43,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "Get the authenticated creative's profile",
+        description:
+          '**Creative accounts.** Callable by any account type, but only a `creative` account has a profile to return (a `client` account gets 404).',
         response: { 200: creativeProfileResponseSchema },
       },
     },
@@ -56,6 +58,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "Create or update the authenticated creative's profile",
+        description:
+          "**Creative accounts only** (requires `profile:creative:write`, granted to `creative` accounts by default — a `client` account is rejected even before the accountType check runs).",
         body: upsertCreativeProfileBodySchema,
         response: { 200: creativeProfileResponseSchema },
       },
@@ -70,6 +74,7 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: 'Get a presigned S3 upload URL for a profile asset',
+        description: "**Creative accounts only** (requires `profile:creative:write`).",
         body: createUploadUrlBodySchema,
         response: { 201: uploadUrlResponseSchema },
       },
@@ -88,7 +93,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: 'Add a portfolio item',
-        description: 'The file must already be uploaded and confirmed via the Files API.',
+        description:
+          '**Creative accounts only** (requires `profile:creative:write`). The file must already be uploaded and confirmed via the Files API.',
         body: createPortfolioItemBodySchema,
         response: { 201: portfolioItemResponseSchema },
       },
@@ -103,6 +109,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "List the authenticated creative's portfolio items",
+        description:
+          '**Creative accounts.** Callable by any account type, but only meaningful for a `creative` account — a `client` account always gets an empty page.',
         querystring: pageQuerySchema,
         response: { 200: portfolioItemPageResponseSchema },
       },
@@ -117,6 +125,7 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: 'Delete a portfolio item',
+        description: '**Creative accounts only** (requires `profile:creative:write`), owner only.',
         params: portfolioItemIdParamsSchema,
         response: { 200: deletePortfolioItemResponseSchema },
       },
@@ -135,6 +144,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "Get the authenticated employer's company profile",
+        description:
+          "**Client (employer) accounts only** (requires `employer:profile:write`, granted to `client` accounts by default). Also enforced server-side against the loaded account's `accountType`, not just the permission.",
         response: { 200: employerProfileResponseSchema },
       },
     },
@@ -148,6 +159,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "Create or update the authenticated employer's company profile",
+        description:
+          "**Client (employer) accounts only** (requires `employer:profile:write`). Also enforced server-side against the loaded account's `accountType`.",
         body: upsertEmployerProfileBodySchema,
         response: { 200: employerProfileResponseSchema },
       },
@@ -166,6 +179,8 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: 'Search public talent profiles',
+        description:
+          '**Any account type** — typically used by `client` accounts browsing to hire, but not permission-restricted (same pattern as browsing listings).',
         querystring: talentSearchQuerySchema,
         response: { 200: publicTalentPageResponseSchema },
       },
@@ -180,6 +195,7 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "Get a talent's public profile",
+        description: '**Any account type.**',
         params: accountIdParamsSchema,
         response: { 200: publicTalentResponseSchema },
       },
@@ -194,6 +210,7 @@ export function registerUsersRoutes(app: FastifyInstance, controller: UsersContr
       schema: {
         tags: ['Users'],
         summary: "List a talent's public portfolio items",
+        description: '**Any account type.**',
         params: accountIdParamsSchema,
         querystring: pageQuerySchema,
         response: { 200: portfolioItemPageResponseSchema },

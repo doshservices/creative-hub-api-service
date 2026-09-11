@@ -33,6 +33,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
       schema: {
         tags: ['Identity (KYC)'],
         summary: 'Submit a KYC verification',
+        description:
+          "**Creative accounts only** (requires `identity:verify`, granted to `creative` accounts by default — `client` accounts do not go through KYC in this product).",
         body: submitVerificationBodySchema,
         response: { 201: verificationResponseSchema },
       },
@@ -47,6 +49,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
       schema: {
         tags: ['Identity (KYC)'],
         summary: "Get the caller's KYC status",
+        description:
+          '**Any account type**, though only meaningful for a `creative` account — a `client` account will never have submitted one.',
         response: { 200: verificationResponseSchema },
       },
     },
@@ -61,6 +65,8 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
       schema: {
         tags: ['Identity (KYC)', 'Admin'],
         summary: 'List KYC verifications, optionally filtered by status',
+        description:
+          '**Admin only** — requires `identity:review`, granted via an RBAC role assignment rather than by account type.',
         querystring: listVerificationsQuerySchema,
         response: { 200: verificationPageResponseSchema },
       },
@@ -75,6 +81,7 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
       schema: {
         tags: ['Identity (KYC)', 'Admin'],
         summary: 'Approve a KYC verification',
+        description: '**Admin only** — requires `identity:review`.',
         params: verificationIdParamSchema,
         response: { 200: verificationResponseSchema },
       },
@@ -89,6 +96,7 @@ export function registerIdentityRoutes(app: FastifyInstance, controller: Identit
       schema: {
         tags: ['Identity (KYC)', 'Admin'],
         summary: 'Reject a KYC verification',
+        description: '**Admin only** — requires `identity:review`.',
         params: verificationIdParamSchema,
         body: rejectVerificationBodySchema,
         response: { 200: verificationResponseSchema },

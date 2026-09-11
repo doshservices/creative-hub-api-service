@@ -16,6 +16,8 @@ export function registerAuditRoutes(app: FastifyInstance, controller: AuditContr
       schema: {
         tags: ['Audit', 'Admin'],
         summary: 'List audit log entries, filterable by action/actor/date range',
+        description:
+          '**Admin only** — requires `audit:read`, granted via an RBAC role assignment rather than by account type.',
         querystring: adminAuditQuerySchema,
         response: { 200: auditEntryPageResponseSchema },
       },

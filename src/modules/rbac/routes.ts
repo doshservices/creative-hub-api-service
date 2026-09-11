@@ -34,6 +34,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: 'List the full catalog of permissions',
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         response: { 200: permissionsCatalogResponseSchema },
       },
     },
@@ -47,6 +49,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: 'Create a role',
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         body: createRoleBodySchema,
         response: { 201: roleResponseSchema },
       },
@@ -61,6 +65,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: 'List roles',
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         querystring: listQuerySchema,
         response: { 200: rolePageResponseSchema },
       },
@@ -75,6 +81,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: 'Get a role by id',
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         params: roleIdParamSchema,
         response: { 200: roleResponseSchema },
       },
@@ -89,6 +97,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: "Replace a role's permission set",
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         params: roleIdParamSchema,
         body: updateRolePermissionsBodySchema,
         response: { 200: roleResponseSchema },
@@ -104,6 +114,8 @@ export function registerRbacRoutes(app: FastifyInstance, controller: RbacControl
       schema: {
         tags: ['RBAC'],
         summary: 'Assign a role to an account',
+        description:
+          "**Admin only** — requires `rbac:manage`. This permission isn't granted to any account type by default; the first admin has to be granted it directly (e.g. a one-off script or database write), after which that admin can assign roles carrying it to other accounts through this same API.",
         params: accountIdParamSchema,
         body: assignRoleBodySchema,
         response: { 200: roleAssignmentResponseSchema },

@@ -27,6 +27,7 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
       schema: {
         tags: ['Wallet'],
         summary: "Get the caller's wallet balance",
+        description: '**Any account type** — every account has its own wallet.',
         querystring: walletQuerySchema,
         response: { 200: walletResponseSchema },
       },
@@ -41,6 +42,7 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
       schema: {
         tags: ['Wallet'],
         summary: "List the caller's ledger entries",
+        description: '**Any account type.**',
         querystring: ledgerQuerySchema,
         response: { 200: ledgerPageResponseSchema },
       },
@@ -55,6 +57,7 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
       schema: {
         tags: ['Wallet'],
         summary: "Get the caller's available/held/total-earned summary",
+        description: '**Any account type.**',
         querystring: summaryQuerySchema,
         response: { 200: walletSummaryResponseSchema },
       },
@@ -70,6 +73,8 @@ export function registerWalletRoutes(app: FastifyInstance, controller: WalletCon
       schema: {
         tags: ['Wallet', 'Admin'],
         summary: 'List ledger entries across every account',
+        description:
+          '**Admin only** — requires `wallet:admin`, granted via an RBAC role assignment rather than by account type.',
         querystring: adminLedgerQuerySchema,
         response: { 200: ledgerPageResponseSchema },
       },

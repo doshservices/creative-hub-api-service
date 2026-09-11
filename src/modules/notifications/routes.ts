@@ -13,6 +13,7 @@ export function registerNotificationsRoutes(
       schema: {
         tags: ['Notifications'],
         summary: "Get the caller's notification preferences",
+        description: '**Any account type.**',
         response: { 200: preferencesResponseSchema },
       },
     },
@@ -26,6 +27,7 @@ export function registerNotificationsRoutes(
       schema: {
         tags: ['Notifications'],
         summary: "Update the caller's notification preferences",
+        description: '**Any account type.**',
         body: updatePreferencesBodySchema,
         response: { 200: preferencesResponseSchema },
       },

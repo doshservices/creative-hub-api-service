@@ -32,6 +32,7 @@ export function registerMessagingRoutes(
       schema: {
         tags: ['Messaging'],
         summary: 'Send a message, creating the conversation if needed',
+        description: '**Any account type** — either side can start or continue a conversation.',
         body: sendMessageBodySchema,
         response: { 201: messageResponseSchema },
       },
@@ -46,6 +47,7 @@ export function registerMessagingRoutes(
       schema: {
         tags: ['Messaging'],
         summary: "List the caller's conversations",
+        description: '**Any account type.**',
         querystring: conversationListQuerySchema,
         response: { 200: conversationPageResponseSchema },
       },
@@ -60,6 +62,7 @@ export function registerMessagingRoutes(
       schema: {
         tags: ['Messaging'],
         summary: "List a conversation's messages",
+        description: '**Any account type** — must be a participant in the conversation.',
         params: conversationIdParamSchema,
         querystring: messageListQuerySchema,
         response: { 200: messagePageResponseSchema },
@@ -75,6 +78,7 @@ export function registerMessagingRoutes(
       schema: {
         tags: ['Messaging'],
         summary: 'Mark a conversation as read',
+        description: '**Any account type** — must be a participant in the conversation.',
         params: conversationIdParamSchema,
       },
     },

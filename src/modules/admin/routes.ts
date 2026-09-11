@@ -22,6 +22,8 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
       schema: {
         tags: ['Admin'],
         summary: 'List creative accounts with profile, KYC status, and wallet balance joined in',
+        description:
+          '**Admin only** — requires `admin:users:manage`, granted via an RBAC role assignment rather than by account type.',
         querystring: listQuerySchema,
         response: { 200: talentPageResponseSchema },
       },
@@ -36,6 +38,8 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
       schema: {
         tags: ['Admin'],
         summary: 'List client accounts with company profile and wallet balance joined in',
+        description:
+          '**Admin only** — requires `admin:users:manage`, granted via an RBAC role assignment rather than by account type.',
         querystring: listQuerySchema,
         response: { 200: employerPageResponseSchema },
       },
@@ -51,6 +55,8 @@ export function registerAdminRoutes(app: FastifyInstance, controller: AdminContr
         tags: ['Admin'],
         summary:
           'Platform-wide dashboard stats: totals, listings by category, signups by day, ledger volume by type',
+        description:
+          '**Admin only** — requires `admin:users:manage`, granted via an RBAC role assignment rather than by account type.',
         querystring: statsQuerySchema,
         response: { 200: statsResponseSchema },
       },

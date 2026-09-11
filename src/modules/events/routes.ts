@@ -32,6 +32,8 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: 'Create an event',
+        description:
+          '**Client (employer) accounts only** (requires `events:write`, granted to `client` accounts by default).',
         body: createEventBodySchema,
         response: { 201: eventResponseSchema },
       },
@@ -46,6 +48,7 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: 'Browse public events',
+        description: '**Any account type** — public browse.',
         querystring: browseEventsQuerySchema,
         response: { 200: eventPageResponseSchema },
       },
@@ -60,6 +63,7 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: "List the caller's own organized events",
+        description: '**Client (employer) accounts only** (requires `events:write`).',
         querystring: listQuerySchema,
         response: { 200: eventPageResponseSchema },
       },
@@ -74,6 +78,7 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: 'Get an event by id',
+        description: '**Any account type.**',
         params: idParamSchema,
         response: { 200: eventResponseSchema },
       },
@@ -88,6 +93,8 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: 'RSVP to an event',
+        description:
+          "**Any account type** — attending isn't a privileged action, no special permission required.",
         params: idParamSchema,
         response: { 201: eventResponseSchema },
       },
@@ -102,6 +109,7 @@ export function registerEventsRoutes(app: FastifyInstance, controller: EventsCon
       schema: {
         tags: ['Events'],
         summary: 'Cancel an RSVP',
+        description: '**Any account type.**',
         params: idParamSchema,
         response: { 200: eventResponseSchema },
       },

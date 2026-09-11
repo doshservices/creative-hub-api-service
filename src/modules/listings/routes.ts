@@ -36,7 +36,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: 'Create a job listing',
-        description: 'Pass `publish: false` to save it as a draft instead of publishing it live.',
+        description:
+          '**Client (employer) accounts only** (requires `listings:write`, granted to `client` accounts by default). Pass `publish: false` to save it as a draft instead of publishing it live.',
         body: createListingBodySchema,
         response: { 201: listingResponseSchema },
       },
@@ -51,7 +52,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: 'Browse open listings',
-        description: 'Public search/filter over published listings.',
+        description:
+          '**Any account type** — typically used by `creative` accounts browsing for work, not permission-restricted. Public search/filter over published listings.',
         querystring: listQuerySchema,
         response: { 200: listingPageResponseSchema },
       },
@@ -66,6 +68,7 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: "List the caller's own listings",
+        description: '**Client (employer) accounts only** (requires `listings:write`).',
         querystring: listQuerySchema,
         response: { 200: listingPageResponseSchema },
       },
@@ -82,6 +85,7 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: "Get the caller's own listing stats",
+        description: '**Client (employer) accounts only** (requires `listings:write`).',
         response: { 200: listingStatsResponseSchema },
       },
     },
@@ -95,6 +99,7 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: 'Get a listing by id',
+        description: '**Any account type.**',
         params: idParamSchema,
         response: { 200: listingResponseSchema },
       },
@@ -109,6 +114,7 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: 'Update a listing (owner only)',
+        description: '**Client (employer) accounts only** (requires `listings:write`), owner only.',
         params: idParamSchema,
         body: updateListingBodySchema,
         response: { 200: listingResponseSchema },
@@ -124,6 +130,7 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings'],
         summary: 'Close a listing (owner only)',
+        description: '**Client (employer) accounts only** (requires `listings:write`), owner only.',
         params: idParamSchema,
         response: { 200: listingResponseSchema },
       },
@@ -143,6 +150,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings', 'Admin'],
         summary: 'Flag a listing',
+        description:
+          "**Admin only** — requires `listings:moderate`, granted via an RBAC role assignment rather than by account type. Works on any client's listing, no ownership check.",
         params: idParamSchema,
         body: flagListingBodySchema,
         response: { 200: listingResponseSchema },
@@ -158,6 +167,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings', 'Admin'],
         summary: 'Unflag a listing',
+        description:
+          "**Admin only** — requires `listings:moderate`, granted via an RBAC role assignment rather than by account type. Works on any client's listing, no ownership check.",
         params: idParamSchema,
         response: { 200: listingResponseSchema },
       },
@@ -172,6 +183,8 @@ export function registerListingsRoutes(app: FastifyInstance, controller: Listing
       schema: {
         tags: ['Listings', 'Admin'],
         summary: 'Close a listing (admin override)',
+        description:
+          "**Admin only** — requires `listings:moderate`, granted via an RBAC role assignment rather than by account type. Works on any client's listing, no ownership check.",
         params: idParamSchema,
         response: { 200: listingResponseSchema },
       },

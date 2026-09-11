@@ -41,6 +41,8 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: 'Initiate a deposit',
+        description:
+          '**Creative or client accounts** (requires `payments:initiate`, granted to both account types by default).',
         body: initiateDepositBodySchema,
         response: { 201: depositResponseSchema },
       },
@@ -55,6 +57,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: 'Get a deposit by id',
+        description: '**Any account type**, owner only.',
         params: idParamSchema,
         response: { 200: depositResponseSchema },
       },
@@ -69,6 +72,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: "List the caller's own deposits",
+        description: "**Any account type** — lists the caller's own deposits.",
         querystring: listQuerySchema,
         response: { 200: depositPageResponseSchema },
       },
@@ -83,6 +87,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: 'Initiate a withdrawal',
+        description: '**Creative or client accounts** (requires `payments:initiate`).',
         body: initiateWithdrawalBodySchema,
         response: { 201: withdrawalResponseSchema },
       },
@@ -97,6 +102,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: 'Get a withdrawal by id',
+        description: '**Any account type**, owner only.',
         params: idParamSchema,
         response: { 200: withdrawalResponseSchema },
       },
@@ -111,6 +117,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments'],
         summary: "List the caller's own withdrawals",
+        description: "**Any account type** — lists the caller's own withdrawals.",
         querystring: listQuerySchema,
         response: { 200: withdrawalPageResponseSchema },
       },
@@ -126,6 +133,8 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments', 'Admin'],
         summary: 'List deposits across every account',
+        description:
+          '**Admin only** — requires `payments:admin`, granted via an RBAC role assignment rather than by account type.',
         querystring: adminDepositQuerySchema,
         response: { 200: depositPageResponseSchema },
       },
@@ -140,6 +149,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments', 'Admin'],
         summary: 'List withdrawals across every account',
+        description: '**Admin only** — requires `payments:admin`.',
         querystring: adminWithdrawalQuerySchema,
         response: { 200: withdrawalPageResponseSchema },
       },
@@ -154,6 +164,7 @@ export function registerPaymentsRoutes(
       schema: {
         tags: ['Payments', 'Admin'],
         summary: 'Reverse a completed withdrawal (refund)',
+        description: '**Admin only** — requires `payments:admin`.',
         params: idParamSchema,
         response: { 200: withdrawalResponseSchema },
       },
