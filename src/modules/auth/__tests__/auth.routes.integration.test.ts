@@ -180,6 +180,25 @@ describe('auth routes', () => {
     expect(auditEntries[0]?.targetType).toBe('account');
   });
 
+  it('logs in an account predating the twoFactor field without 500ing', async () => {
+    // `twoFactor` was added to AccountDocument after this collection already had rows in
+    // production — there's no migration, so an account created before that point has no
+    // `twoFactor` field on its stored document at all. Simulate that by stripping it directly,
+    // bypassing the API (which always writes the field on register).
+    const email = uniqueEmail();
+    await register(app, email);
+    await app.mongo.db.collection('accounts').updateOne({ email }, { $unset: { twoFactor: '' } });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email, password: 'password123' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.accessToken).toEqual(expect.any(String));
+  });
+
   it('rejects login with an incorrect password', async () => {
     const email = uniqueEmail();
     await register(app, email);

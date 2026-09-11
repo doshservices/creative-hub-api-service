@@ -34,7 +34,10 @@ function toDTO(doc: AccountDocument): AccountDTO {
     accountType: doc.accountType,
     permissions: doc.permissions,
     status: doc.status,
-    twoFactorEnabled: doc.twoFactor.enabled,
+    // `twoFactor` was added to the schema after this collection already had rows — there's no
+    // migration, so any account created before that point has no `twoFactor` field at all on its
+    // stored document. Missing is semantically identical to disabled; never crash reading it.
+    twoFactorEnabled: doc.twoFactor?.enabled ?? false,
     createdAt: doc.createdAt,
   };
 }
@@ -135,13 +138,18 @@ export class AccountRepository {
   }
 
   // Narrow projection for the 2FA setup/login flows — never widen findById's projection just
-  // for this, same reasoning as findCredentialsById.
+  // for this, same reasoning as findCredentialsById. Falls back to the disabled default for an
+  // account predating the `twoFactor` field (see toDTO's comment) — missing is disabled, never
+  // a crash.
   async findTwoFactorStateById(id: string): Promise<TwoFactorState | null> {
     const doc = await this.collection.findOne(
       { _id: new ObjectId(id) },
       { projection: { twoFactor: 1 } },
     );
-    return doc ? doc.twoFactor : null;
+    if (!doc) {
+      return null;
+    }
+    return doc.twoFactor ?? { ...DISABLED_TWO_FACTOR };
   }
 
   // POST /auth/2fa/setup — the secret isn't active until enableTwoFactor confirms a code
