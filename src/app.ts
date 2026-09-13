@@ -57,7 +57,12 @@ export async function buildApp(): Promise<FastifyInstance> {
   // it's in place before any route can throw, then infra plugins, then docs, then modules.
   await app.register(configPlugin);
   await app.register(errorHandlerPlugin);
-  await app.register(cors, { origin: app.config.cors.origin });
+  // credentials: true so a browser client that sends `credentials: 'include'`/`withCredentials`
+  // isn't blocked even though this API's own auth is a Bearer token, not a cookie — some FE HTTP
+  // client setups send credentials by default for every request regardless of auth scheme, and
+  // the browser requires this header whenever a credentialed request is made, even when the
+  // origin already matches exactly.
+  await app.register(cors, { origin: app.config.cors.origin, credentials: true });
   await app.register(mongoPlugin);
   await app.register(redisPlugin);
   await app.register(jwtAuthPlugin);
