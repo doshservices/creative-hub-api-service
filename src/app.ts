@@ -62,7 +62,15 @@ export async function buildApp(): Promise<FastifyInstance> {
   // client setups send credentials by default for every request regardless of auth scheme, and
   // the browser requires this header whenever a credentialed request is made, even when the
   // origin already matches exactly.
-  await app.register(cors, { origin: app.config.cors.origin, credentials: true });
+  //
+  // methods: explicit — @fastify/cors's default is only GET/HEAD/POST, which silently fails
+  // preflight for every PUT/DELETE route in this API (profile updates, listing edits, portfolio
+  // deletes, etc.) even when the origin and credentials checks both pass.
+  await app.register(cors, {
+    origin: app.config.cors.origin,
+    credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  });
   await app.register(mongoPlugin);
   await app.register(redisPlugin);
   await app.register(jwtAuthPlugin);
