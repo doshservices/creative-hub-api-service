@@ -16,6 +16,12 @@ const envSchema = z.object({
   AWS_S3_BUCKET: z.string().min(1),
   AWS_ACCESS_KEY_ID: z.string().min(1),
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
+  // Only needed for an S3-compatible provider that isn't real AWS S3 (Railway buckets,
+  // Cloudflare R2, MinIO, etc.) — leave unset for real AWS S3, where the SDK derives the
+  // endpoint from AWS_REGION itself. Most such providers also need path-style addressing
+  // (bucket in the URL path, not the hostname) rather than AWS's default virtual-hosted style.
+  AWS_S3_ENDPOINT: z.url().optional(),
+  AWS_S3_FORCE_PATH_STYLE: z.coerce.boolean().default(false),
 
   CORS_ORIGIN: z.string().min(1),
 
@@ -34,6 +40,21 @@ const envSchema = z.object({
   FLUTTERWAVE_WEBHOOK_SECRET_HASH: z.string().min(1),
   PAYMENTS_JOB_ATTEMPTS: z.coerce.number().int().positive().default(3),
   PAYMENTS_JOB_BACKOFF_MS: z.coerce.number().int().positive().default(200),
+}).superRefine((data, ctx) => {
+  // AWS_REGION=auto with no endpoint is always broken: the AWS SDK builds
+  // `<bucket>.s3.auto.amazonaws.com`, which doesn't exist — 'auto' is the region value R2 (and
+  // some other S3-compatible providers) expect, but only once AWS_S3_ENDPOINT points somewhere
+  // real. Every presigned URL issued under this combination fails DNS resolution client-side,
+  // silently — see the "Failed to load resource: net::ERR_NAME_NOT_RESOLVED" bug this guards
+  // against. Fail at startup instead of issuing broken URLs.
+  if (data.AWS_REGION === 'auto' && !data.AWS_S3_ENDPOINT) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['AWS_S3_ENDPOINT'],
+      message:
+        "AWS_REGION is 'auto', which is only valid for an S3-compatible provider (Railway buckets, Cloudflare R2, MinIO) — AWS_S3_ENDPOINT must also be set to that provider's actual endpoint, or AWS_REGION must be a real AWS region.",
+    });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -55,6 +76,8 @@ export interface AppConfig {
     bucket: string;
     accessKeyId: string;
     secretAccessKey: string;
+    endpoint: string | undefined;
+    forcePathStyle: boolean;
   };
   cors: { origin: string };
   prembly: {
@@ -108,6 +131,8 @@ export function loadEnv(): AppConfig {
       bucket: data.AWS_S3_BUCKET,
       accessKeyId: data.AWS_ACCESS_KEY_ID,
       secretAccessKey: data.AWS_SECRET_ACCESS_KEY,
+      endpoint: data.AWS_S3_ENDPOINT,
+      forcePathStyle: data.AWS_S3_FORCE_PATH_STYLE,
     },
     cors: { origin: data.CORS_ORIGIN },
     prembly: {
