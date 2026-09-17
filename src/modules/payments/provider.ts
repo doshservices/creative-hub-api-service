@@ -63,10 +63,26 @@ function toMinorUnits(amountMajor: number): number {
   return Math.round(amountMajor * 100);
 }
 
-interface FlutterwaveEnvelope<T> {
+// `message` is documented as always present on the v3 envelope, but a real rejection (e.g. an
+// insufficient-float "funding not allowed" response, or an edge/proxy-level auth failure) has
+// been observed to omit it entirely and nest the actual text under `error.message` instead — see
+// extractErrorMessage below. Both are optional here so a response missing either shape never
+// silently produces `undefined`/`null` where a diagnostic string belongs (that's exactly how a
+// withdrawal ended up with `failureReason: null` in the database with no way to tell why it
+// failed).
+export interface FlutterwaveEnvelope<T> {
   status: 'success' | 'error';
-  message: string;
+  message?: string;
+  error?: { type?: string; code?: string; message?: string };
   data?: T;
+}
+
+// Never returns undefined/null — every caller that stores this as a failure reason needs a real,
+// human-readable string, even when Flutterwave's response doesn't match either known shape.
+// Exported for a direct unit test — this exact function is the fix for a withdrawal that landed
+// with `failureReason: null` in production.
+export function extractErrorMessage(body: FlutterwaveEnvelope<unknown>, status: number): string {
+  return body.message ?? body.error?.message ?? `Flutterwave returned an unrecognized error shape (HTTP ${status})`;
 }
 
 async function postJson<T>(
@@ -120,10 +136,10 @@ export class HttpFlutterwaveClient implements FlutterwaveClientPort {
     // A 4xx here is a request-shape/business rejection (bad currency, malformed customer,
     // account restriction) — definitive, not worth retrying.
     if (!ok && status >= 400 && status < 500) {
-      return { status: 'rejected', reason: body.message };
+      return { status: 'rejected', reason: extractErrorMessage(body, status) };
     }
     if (!ok || body.status !== 'success' || !body.data?.link) {
-      throw new Error(`Flutterwave payment initiation failed with status ${status}: ${body.message}`);
+      throw new Error(`Flutterwave payment initiation failed with status ${status}: ${extractErrorMessage(body, status)}`);
     }
     return { status: 'accepted', checkoutUrl: body.data.link };
   }
@@ -137,7 +153,7 @@ export class HttpFlutterwaveClient implements FlutterwaveClientPort {
     }>(`${this.baseUrl}/transactions/${providerTransactionId}/verify`, this.secretKey);
 
     if (!ok || body.status !== 'success' || !body.data) {
-      throw new Error(`Flutterwave transaction verify failed with status ${status}: ${body.message}`);
+      throw new Error(`Flutterwave transaction verify failed with status ${status}: ${extractErrorMessage(body, status)}`);
     }
     const providerStatus = body.data.status === 'successful' ? 'successful' : 'failed';
     return {
@@ -163,10 +179,10 @@ export class HttpFlutterwaveClient implements FlutterwaveClientPort {
     );
 
     if (!ok && status >= 400 && status < 500) {
-      return { status: 'rejected', reason: body.message };
+      return { status: 'rejected', reason: extractErrorMessage(body, status) };
     }
     if (!ok || body.status !== 'success' || body.data === undefined) {
-      throw new Error(`Flutterwave transfer initiation failed with status ${status}: ${body.message}`);
+      throw new Error(`Flutterwave transfer initiation failed with status ${status}: ${extractErrorMessage(body, status)}`);
     }
     return { status: 'accepted', providerTransferId: String(body.data.id) };
   }
@@ -179,7 +195,7 @@ export class HttpFlutterwaveClient implements FlutterwaveClientPort {
     );
 
     if (!ok || body.status !== 'success' || !body.data) {
-      throw new Error(`Flutterwave transfer verify failed with status ${status}: ${body.message}`);
+      throw new Error(`Flutterwave transfer verify failed with status ${status}: ${extractErrorMessage(body, status)}`);
     }
     const providerStatus = body.data.status === 'SUCCESSFUL' ? 'successful' : 'failed';
     return { status: providerStatus };

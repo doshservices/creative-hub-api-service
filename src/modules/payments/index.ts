@@ -115,17 +115,28 @@ export default async function paymentsModule(app: FastifyInstance): Promise<void
     const attempts = job.opts.attempts ?? 1;
     if (job.attemptsMade < attempts) return;
 
+    // Logged here regardless of outcome below — this is the only place an exhausted-retries
+    // failure is otherwise visible at all; without it, a failed deposit/withdrawal produces no
+    // server-log trace whatsoever, only a row in Mongo (see provider.ts's extractErrorMessage
+    // comment for the bug this masked: a withdrawal landed with failureReason: null and no way
+    // to tell why from the logs).
+    app.log.error({ jobName: job.name, jobId: job.id, err: error }, 'payments job exhausted retries');
+
     switch (job.name) {
       case 'initiate-deposit':
       case 'reconcile-deposit': {
         const { depositId } = job.data as { depositId: string };
-        void service.failDepositWithReason(depositId, error.message);
+        service.failDepositWithReason(depositId, error.message).catch((cause: unknown) => {
+          app.log.error({ depositId, err: cause }, 'failed to record deposit failure');
+        });
         break;
       }
       case 'initiate-withdrawal':
       case 'reconcile-withdrawal': {
         const { withdrawalId } = job.data as { withdrawalId: string };
-        void service.failWithdrawalAndReleaseHold(withdrawalId, error.message);
+        service.failWithdrawalAndReleaseHold(withdrawalId, error.message).catch((cause: unknown) => {
+          app.log.error({ withdrawalId, err: cause }, 'failed to record withdrawal failure and release hold');
+        });
         break;
       }
     }
