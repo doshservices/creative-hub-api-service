@@ -1,6 +1,10 @@
 import type { ObjectId } from 'mongodb';
 
-export type AccountType = 'client' | 'creative';
+// 'admin' is deliberately excluded from registerBodySchema's accountType enum — it's never
+// publicly self-registerable. The first admin is created by scripts/bootstrap-admin.ts; every
+// one after that via an existing admin calling POST /auth/admin/accounts. See
+// defaultPermissionsFor in service.ts for what accountType:'admin' grants by default.
+export type AccountType = 'client' | 'creative' | 'admin';
 
 // `secret` is set only once 2FA is actually enabled (after the setup code is confirmed);
 // `pendingSecret` holds a freshly generated secret between POST /auth/2fa/setup and the

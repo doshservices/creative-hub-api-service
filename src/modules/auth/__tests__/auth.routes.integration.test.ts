@@ -77,7 +77,9 @@ describe('auth routes', () => {
     expect(response.json()).toMatchObject({ success: false, error: 'BAD_REQUEST' });
   });
 
-  it('rejects registration with an accountType outside client/creative', async () => {
+  // 'admin' is a real AccountType (see model.ts), just never publicly self-registerable — see
+  // the 'POST /auth/admin/accounts' describe block below for how one actually gets created.
+  it('rejects registration with accountType:admin', async () => {
     const response = await app.inject({
       method: 'POST',
       url: '/auth/register',
@@ -405,6 +407,111 @@ describe('auth routes', () => {
         .find({ targetId, action: { $in: ['auth.account_suspended', 'auth.account_reactivated'] } })
         .toArray();
       expect(auditEntries).toHaveLength(2);
+    });
+  });
+
+  describe('POST /auth/admin/accounts', () => {
+    // There's no self-service way to become an admin — a real operator grants this via rbac's
+    // role-assignment flow (or scripts/bootstrap-admin.ts for the very first one); directly
+    // setting permissions here stands in for that, same as the suspend/reactivate block above.
+    async function loginAsAdmin(): Promise<string> {
+      const adminEmail = uniqueEmail();
+      await register(app, adminEmail);
+      await app.mongo.db
+        .collection('accounts')
+        .updateOne({ email: adminEmail }, { $set: { permissions: [PERMISSIONS.ADMIN_USERS_MANAGE] } });
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email: adminEmail, password: 'password123' },
+      });
+      return loginResponse.json().data.accessToken as string;
+    }
+
+    it('rejects a caller without ADMIN_USERS_MANAGE', async () => {
+      const { accessToken } = (await register(app, uniqueEmail())).json().data;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/admin/accounts',
+        headers: { authorization: `Bearer ${accessToken}` },
+        payload: {
+          email: uniqueEmail(),
+          password: 'password123',
+          firstName: 'New',
+          lastName: 'Admin',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+    });
+
+    it('creates an admin account with every admin permission, records an audit entry, and the new admin can log in', async () => {
+      const adminAccessToken = await loginAsAdmin();
+      const newAdminEmail = uniqueEmail();
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/admin/accounts',
+        headers: { authorization: `Bearer ${adminAccessToken}` },
+        payload: {
+          email: newAdminEmail,
+          password: 'password123',
+          firstName: 'New',
+          lastName: 'Admin',
+        },
+      });
+
+      expect(createResponse.statusCode).toBe(201);
+      const created = createResponse.json().data;
+      expect(created.accountType).toBe('admin');
+      expect(created.permissions).toEqual(
+        expect.arrayContaining([
+          PERMISSIONS.ADMIN_USERS_MANAGE,
+          PERMISSIONS.LISTINGS_MODERATE,
+          PERMISSIONS.IDENTITY_REVIEW,
+          PERMISSIONS.PAYMENTS_ADMIN,
+          PERMISSIONS.WALLET_ADMIN,
+          PERMISSIONS.RBAC_MANAGE,
+          PERMISSIONS.AUDIT_READ,
+        ]),
+      );
+      // Returns the account, not a session — the new admin logs in on their own.
+      expect(created).not.toHaveProperty('accessToken');
+
+      const auditEntries = await app.mongo.db
+        .collection('auditEntries')
+        .find({ action: 'auth.admin_account_created', targetId: created.id })
+        .toArray();
+      expect(auditEntries).toHaveLength(1);
+
+      const loginResponse = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email: newAdminEmail, password: 'password123' },
+      });
+      expect(loginResponse.statusCode).toBe(200);
+      expect(loginResponse.json().data.accessToken).toEqual(expect.any(String));
+    });
+
+    it('rejects creating an admin with an email that is already taken', async () => {
+      const adminAccessToken = await loginAsAdmin();
+      const existingEmail = uniqueEmail();
+      await register(app, existingEmail);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/admin/accounts',
+        headers: { authorization: `Bearer ${adminAccessToken}` },
+        payload: {
+          email: existingEmail,
+          password: 'password123',
+          firstName: 'New',
+          lastName: 'Admin',
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
     });
   });
 

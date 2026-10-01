@@ -21,6 +21,14 @@ export interface RegisterInput {
   accountType: AccountType;
 }
 
+// No accountType field — createAdminAccount always creates one, never takes it as input.
+export interface CreateAdminAccountInput {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
 export interface AccountRepositoryPort {
   findByEmailWithCredentials(
     email: string,
@@ -47,11 +55,18 @@ export interface AccountRepositoryPort {
 }
 
 // 'creative' accounts get hired (own a profile, apply to listings, submit KYC); 'client'
-// accounts hire (post and manage listings). Each grant maps to a route that actually checks it
-// today.
-function defaultPermissionsFor(accountType: AccountType): string[] {
-  return accountType === 'creative'
-    ? [
+// accounts hire (post and manage listings); 'admin' oversees the platform and gets every
+// admin-scoped permission that exists today — there's no partial-admin tier, see
+// createAdminAccount below for how an admin account actually gets created. Each grant maps to a
+// route that actually checks it today.
+// Exported for scripts/bootstrap-admin.ts — the first admin account is created outside the API
+// (nobody holds ADMIN_USERS_MANAGE yet to call POST /auth/admin/accounts), but it must still get
+// the exact same permission set an admin created through the API would, with no second list to
+// drift out of sync.
+export function defaultPermissionsFor(accountType: AccountType): string[] {
+  switch (accountType) {
+    case 'creative':
+      return [
         PERMISSIONS.CREATIVE_PROFILE_WRITE,
         PERMISSIONS.HIRING_APPLY,
         PERMISSIONS.IDENTITY_VERIFY,
@@ -59,8 +74,9 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.FILES_UPLOAD,
         PERMISSIONS.COLLABORATION_SUBMIT,
         PERMISSIONS.REVIEWS_SUBMIT,
-      ]
-    : [
+      ];
+    case 'client':
+      return [
         PERMISSIONS.LISTINGS_WRITE,
         PERMISSIONS.PAYMENTS_INITIATE,
         PERMISSIONS.FILES_UPLOAD,
@@ -69,6 +85,17 @@ function defaultPermissionsFor(accountType: AccountType): string[] {
         PERMISSIONS.EVENTS_WRITE,
         PERMISSIONS.REVIEWS_SUBMIT,
       ];
+    case 'admin':
+      return [
+        PERMISSIONS.ADMIN_USERS_MANAGE,
+        PERMISSIONS.LISTINGS_MODERATE,
+        PERMISSIONS.IDENTITY_REVIEW,
+        PERMISSIONS.PAYMENTS_ADMIN,
+        PERMISSIONS.WALLET_ADMIN,
+        PERMISSIONS.RBAC_MANAGE,
+        PERMISSIONS.AUDIT_READ,
+      ];
+  }
 }
 
 export interface RefreshTokenStorePort {
@@ -126,6 +153,35 @@ export class AuthService {
       permissions: defaultPermissionsFor(input.accountType),
     });
     return this.issueTokens(account);
+  }
+
+  // Admin-only (see routes.ts's ADMIN_USERS_MANAGE gate): there is no public sign-up path for
+  // accountType:'admin' — registerBodySchema's enum excludes it entirely. An existing admin
+  // creates the next one through this method; the very first admin comes from
+  // scripts/bootstrap-admin.ts instead, since nobody holds ADMIN_USERS_MANAGE yet at that point.
+  // Returns the new account, not tokens — creating an admin isn't the same as logging in as one.
+  async createAdminAccount(actorId: string, input: CreateAdminAccountInput): Promise<AccountDTO> {
+    const existing = await this.repository.findByEmailWithCredentials(input.email);
+    if (existing) {
+      throw new ConflictError('An account with this email already exists');
+    }
+    const passwordHash = await hashPassword(input.password);
+    const account = await this.repository.create({
+      email: input.email,
+      passwordHash,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      accountType: 'admin',
+      permissions: defaultPermissionsFor('admin'),
+    });
+    // Creating an admin is a permission grant — on CLAUDE.md's audit-required list.
+    await this.audit.record({
+      actorId,
+      action: 'auth.admin_account_created',
+      targetType: 'account',
+      targetId: account.id,
+    });
+    return account;
   }
 
   async login(email: string, password: string): Promise<AuthTokensDTO | TwoFactorChallengeDTO> {

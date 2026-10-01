@@ -152,6 +152,18 @@ describe('AuthService.register', () => {
         PERMISSIONS.REVIEWS_SUBMIT,
       ],
     ],
+    [
+      'admin',
+      [
+        PERMISSIONS.ADMIN_USERS_MANAGE,
+        PERMISSIONS.LISTINGS_MODERATE,
+        PERMISSIONS.IDENTITY_REVIEW,
+        PERMISSIONS.PAYMENTS_ADMIN,
+        PERMISSIONS.WALLET_ADMIN,
+        PERMISSIONS.RBAC_MANAGE,
+        PERMISSIONS.AUDIT_READ,
+      ],
+    ],
   ])('grants the default permission set for a %s account', async (accountType, permissions) => {
     const { service, repository } = buildService({});
 
@@ -368,6 +380,84 @@ describe('AuthService.suspendAccount / reactivateAccount', () => {
     const { service } = buildService({ repository: { updateStatus: vi.fn().mockResolvedValue(null) } });
 
     await expect(service.suspendAccount('admin-1', 'missing')).rejects.toThrow();
+  });
+});
+
+describe('AuthService.createAdminAccount', () => {
+  it('creates an account with accountType:admin and every admin permission, and audits it', async () => {
+    const { service, repository, audit } = buildService({
+      repository: {
+        create: vi.fn().mockResolvedValue(
+          buildAccount({ id: 'new-admin-1', accountType: 'admin', permissions: [] }),
+        ),
+      },
+    });
+
+    const result = await service.createAdminAccount('admin-1', {
+      email: 'new-admin@example.com',
+      password: 'password123',
+      firstName: 'New',
+      lastName: 'Admin',
+    });
+
+    expect(repository.create).toHaveBeenCalledWith({
+      email: 'new-admin@example.com',
+      passwordHash: expect.any(String),
+      firstName: 'New',
+      lastName: 'Admin',
+      accountType: 'admin',
+      permissions: [
+        PERMISSIONS.ADMIN_USERS_MANAGE,
+        PERMISSIONS.LISTINGS_MODERATE,
+        PERMISSIONS.IDENTITY_REVIEW,
+        PERMISSIONS.PAYMENTS_ADMIN,
+        PERMISSIONS.WALLET_ADMIN,
+        PERMISSIONS.RBAC_MANAGE,
+        PERMISSIONS.AUDIT_READ,
+      ],
+    });
+    expect(result.id).toBe('new-admin-1');
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actorId: 'admin-1',
+        action: 'auth.admin_account_created',
+        targetType: 'account',
+        targetId: 'new-admin-1',
+      }),
+    );
+  });
+
+  it('does not return tokens — the new admin logs in separately', async () => {
+    const { service } = buildService({});
+
+    const result = await service.createAdminAccount('admin-1', {
+      email: 'new-admin@example.com',
+      password: 'password123',
+      firstName: 'New',
+      lastName: 'Admin',
+    });
+
+    expect(result).not.toHaveProperty('accessToken');
+    expect(result).not.toHaveProperty('refreshToken');
+  });
+
+  it('rejects when the email is already taken', async () => {
+    const { service } = buildService({
+      repository: {
+        findByEmailWithCredentials: vi
+          .fn()
+          .mockResolvedValue({ ...buildAccount(), passwordHash: 'irrelevant' }),
+      },
+    });
+
+    await expect(
+      service.createAdminAccount('admin-1', {
+        email: 'dev@example.com',
+        password: 'password123',
+        firstName: 'New',
+        lastName: 'Admin',
+      }),
+    ).rejects.toBeInstanceOf(ConflictError);
   });
 });
 

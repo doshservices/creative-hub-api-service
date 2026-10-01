@@ -10,7 +10,8 @@ export const registerBodySchema = {
     password: { type: 'string', minLength: 8, maxLength: 128 },
     firstName: { type: 'string', minLength: 1, maxLength: 100 },
     lastName: { type: 'string', minLength: 1, maxLength: 100 },
-    // 'client' hires; 'creative' gets hired — see the Choice screen in the frontend.
+    // 'client' hires; 'creative' gets hired — see the Choice screen in the frontend. 'admin' is
+    // deliberately not an option here — see model.ts's AccountType and POST /auth/admin/accounts.
     accountType: { type: 'string', enum: ['client', 'creative'] },
   },
 } as const;
@@ -145,12 +146,26 @@ export const accountResponseSchema = {
         email: { type: 'string' },
         firstName: { type: 'string' },
         lastName: { type: 'string' },
-        accountType: { type: 'string', enum: ['client', 'creative'] },
+        accountType: { type: 'string', enum: ['client', 'creative', 'admin'] },
         permissions: { type: 'array', items: { type: 'string' } },
         status: { type: 'string', enum: ['active', 'suspended'] },
         twoFactorEnabled: { type: 'boolean' },
         createdAt: { type: 'string' },
       },
     },
+  },
+} as const;
+
+// No accountType field — this always creates one with accountType:'admin', never takes it as
+// client input (unlike registerBodySchema, which excludes 'admin' from its own enum entirely).
+export const createAdminAccountBodySchema = {
+  type: 'object',
+  required: ['email', 'password', 'firstName', 'lastName'],
+  additionalProperties: false,
+  properties: {
+    email: { type: 'string', format: 'email', maxLength: 254 },
+    password: { type: 'string', minLength: 8, maxLength: 128 },
+    firstName: { type: 'string', minLength: 1, maxLength: 100 },
+    lastName: { type: 'string', minLength: 1, maxLength: 100 },
   },
 } as const;

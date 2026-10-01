@@ -28,6 +28,13 @@ export interface AccountIdParams {
   id: string;
 }
 
+export interface CreateAdminAccountBody {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
+
 export interface VerifyTwoFactorLoginBody {
   twoFactorToken: string;
   code: string;
@@ -140,5 +147,13 @@ export class AuthController {
   ): Promise<void> => {
     const data = await this.service.reactivateAccount(request.user.sub, request.params.id);
     await reply.send({ success: true, data });
+  };
+
+  createAdminAccount = async (
+    request: FastifyRequest<{ Body: CreateAdminAccountBody }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
+    const data = await this.service.createAdminAccount(request.user.sub, request.body);
+    await reply.code(201).send({ success: true, data });
   };
 }

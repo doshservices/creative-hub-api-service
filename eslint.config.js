@@ -54,5 +54,11 @@ export default tseslint.config(
     files: ['*.config.ts', '*.config.js'],
     extends: [...tseslint.configs.recommended],
   },
+  // One-off ops scripts (bootstrap-admin.ts, etc.) — outside tsconfig's rootDir ("src"), so no
+  // type-aware linting here, same reasoning as the root config files above.
+  {
+    files: ['scripts/**/*.ts'],
+    extends: [...tseslint.configs.recommended],
+  },
   eslintConfigPrettier,
 );

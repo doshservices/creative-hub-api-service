@@ -5,6 +5,7 @@ import type {
   AccountIdParams,
   AuthController,
   ChangePasswordBody,
+  CreateAdminAccountBody,
   DisableTwoFactorBody,
   EnableTwoFactorBody,
   VerifyTwoFactorLoginBody,
@@ -13,6 +14,7 @@ import {
   accountResponseSchema,
   authTokensResponseSchema,
   changePasswordBodySchema,
+  createAdminAccountBodySchema,
   disableTwoFactorBodySchema,
   enableTwoFactorBodySchema,
   enableTwoFactorResponseSchema,
@@ -215,5 +217,21 @@ export function registerAuthRoutes(app: FastifyInstance, controller: AuthControl
       },
     },
     controller.reactivateAccount,
+  );
+
+  app.post<{ Body: CreateAdminAccountBody }>(
+    '/admin/accounts',
+    {
+      preHandler: [app.authenticate, requireAdminUsersManage],
+      schema: {
+        tags: ['Auth', 'Admin'],
+        summary: 'Create a new admin account',
+        description:
+          "**Admin only** — requires `admin:users:manage`. There is no public sign-up for accountType:'admin' (see POST /auth/register); this is the only way to create one past the first, which comes from this repo's scripts/bootstrap-admin.ts instead. The new admin gets every admin-scoped permission by default and logs in separately via the normal POST /auth/login with their own credentials — this endpoint returns the created account, not a session.",
+        body: createAdminAccountBodySchema,
+        response: { 201: accountResponseSchema },
+      },
+    },
+    controller.createAdminAccount,
   );
 }
